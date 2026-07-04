@@ -28,7 +28,14 @@ wasbuilt () {
 
 markbuilt () {
 	varname="built_${1//-/_}_${platform//-/_}"
-	declare -g "$varname=0"
+	# NOTE: intentionally not using `declare -g`, since that requires
+	# bash 4.2+. macOS ships bash 3.2 as /bin/bash (Apple stopped
+	# updating it for licensing reasons), and GitHub's macos-14 runner
+	# still invokes scripts with that system bash unless a script
+	# explicitly re-execs itself under a newer one. Plain assignment via
+	# eval works identically for our purposes here (a simple global
+	# flag variable) on both bash 3.2 and modern bash.
+	eval "$varname=0"
 }
 
 # loadplatform: sets up SDK sysroot, target triple, and compiler flags for
