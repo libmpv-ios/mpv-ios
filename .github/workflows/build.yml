@@ -1,0 +1,102 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ios-libmpv:
+    # Apple Silicon runner: matches the arm64 host most closely to our
+    # target architectures and has recent Xcode preinstalled.
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Select latest available Xcode
+        run: |
+          LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          echo "Using $LATEST"
+          sudo xcode-select -s "$LATEST/Contents/Developer"
+          xcodebuild -version
+
+      - name: Install build tools
+        run: |
+          brew install meson ninja pkg-config gnu-sed nasm autoconf automake libtool
+
+      - name: Export cache key
+        run: buildscripts/include/ci.sh export >>"$GITHUB_ENV"
+        working-directory: buildscripts
+
+      - uses: actions/cache@v5
+        with:
+          path: buildscripts/gh-cache/
+          key: "${{ env.CACHE_IDENTIFIER }}"
+
+      - name: Download / build dependency prefixes (cached per platform slice)
+        working-directory: buildscripts
+        env:
+          CACHE_MODE: folder
+          CACHE_FOLDER: ${{ github.workspace }}/buildscripts/gh-cache
+        run: |
+          mkdir -p "$CACHE_FOLDER"
+          ./include/ci.sh install
+
+      - name: Build libmpv + assemble XCFramework
+        working-directory: buildscripts
+        run: ./include/ci.sh build
+
+      - name: Verify XCFramework structure
+        run: |
+          test -d Libmpv.xcframework
+          find Libmpv.xcframework -maxdepth 2
+
+      - name: Stage MPVKit package with binary framework
+        run: |
+          mkdir -p MPVKit/Frameworks
+          cp -R Libmpv.xcframework MPVKit/Frameworks/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Libmpv-xcframework
+          path: Libmpv.xcframework
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MPVKit-package
+          path: MPVKit
+          if-no-files-found: error
+
+  swift-package-build:
+    needs: ios-libmpv
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Select latest available Xcode
+        run: |
+          LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          echo "Using $LATEST"
+          sudo xcode-select -s "$LATEST/Contents/Developer"
+          xcodebuild -version
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: MPVKit-package
+          path: MPVKit
+
+      - name: Build MPVKit for iOS Simulator
+        run: |
+          cd MPVKit
+          swift build \
+            -Xswiftc -sdk -Xswiftc "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
+            -Xswiftc -target -Xswiftc arm64-apple-ios17.0-simulator
+
+      - name: Build MPVKit for iOS device
+        run: |
+          cd MPVKit
+          swift build \
+            -Xswiftc -sdk -Xswiftc "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            -Xswiftc -target -Xswiftc arm64-apple-ios17.0

@@ -1,0 +1,105 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v1.0.0)'
+        required: true
+
+jobs:
+  build-and-release:
+    runs-on: macos-14
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Select latest available Xcode
+        run: |
+          LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          echo "Using $LATEST"
+          sudo xcode-select -s "$LATEST/Contents/Developer"
+          xcodebuild -version
+
+      - name: Install build tools
+        run: |
+          brew install meson ninja pkg-config gnu-sed nasm autoconf automake libtool
+
+      - name: Export cache key
+        run: buildscripts/include/ci.sh export >>"$GITHUB_ENV"
+        working-directory: buildscripts
+
+      - uses: actions/cache@v5
+        with:
+          path: buildscripts/gh-cache/
+          key: "${{ env.CACHE_IDENTIFIER }}"
+
+      - name: Download / build dependency prefixes
+        working-directory: buildscripts
+        env:
+          CACHE_MODE: folder
+          CACHE_FOLDER: ${{ github.workspace }}/buildscripts/gh-cache
+        run: |
+          mkdir -p "$CACHE_FOLDER"
+          ./include/ci.sh install
+
+      - name: Build libmpv + assemble XCFramework
+        working-directory: buildscripts
+        run: ./include/ci.sh build
+
+      - name: Determine release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >>"$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Package release assets
+        run: |
+          mkdir -p MPVKit/Frameworks
+          cp -R Libmpv.xcframework MPVKit/Frameworks/
+
+          # Zipped XCFramework alone, for consumers who want to wire it into
+          # their own Package.swift (e.g. via a binaryTarget URL+checksum).
+          ditto -c -k --sequesterRsrc --keepParent Libmpv.xcframework "Libmpv.xcframework.zip"
+
+          # Full MPVKit Swift Package, framework included, ready to drop in
+          # via "Add Local Package".
+          zip -r -q "MPVKit-${{ steps.tag.outputs.tag }}.zip" MPVKit -x "*.DS_Store"
+
+      - name: Compute checksum for Swift Package binaryTarget
+        run: |
+          if swift package compute-checksum "Libmpv.xcframework.zip" > checksum.txt 2>/dev/null; then
+            echo "Computed via swift package compute-checksum"
+          else
+            echo "Falling back to shasum"
+            shasum -a 256 "Libmpv.xcframework.zip" | awk '{print $1}' > checksum.txt
+          fi
+          echo "Checksum: $(cat checksum.txt)"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: mpv-ios ${{ steps.tag.outputs.tag }}
+          body: |
+            Prebuilt libmpv XCFramework and MPVKit Swift Package for iOS.
+
+            **Assets:**
+            - `Libmpv.xcframework.zip` — binary framework only
+            - `MPVKit-${{ steps.tag.outputs.tag }}.zip` — full Swift Package (framework included)
+            - `checksum.txt` — SHA-256 checksum for `binaryTarget(url:checksum:)` in a remote Package.swift
+
+            See the main README in this repository for integration steps.
+          files: |
+            Libmpv.xcframework.zip
+            MPVKit-${{ steps.tag.outputs.tag }}.zip
+            checksum.txt
+          generate_release_notes: true

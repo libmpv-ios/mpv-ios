@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+
+	<!-- Enables audio to continue when the app is backgrounded/screen locked,
+	     and lets mpv's audio session stay active during playback. Equivalent
+	     to mpv-android's foreground service used for background playback. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
+
+	<!-- Only needed if you intend to play plain-HTTP (non-TLS) sources.
+	     Prefer NSExceptionDomains scoped to specific hosts in production
+	     rather than a blanket allow — this blanket setting is included here
+	     only as a clearly-labeled starting point for local development
+	     against test streams; ship a tightened version for App Store
+	     submission. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<!-- Example: allow a specific test-streaming host over HTTP.
+			     Replace or remove for production. -->
+			<key>example.com</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
+
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+
+	<key>UIRequiresFullScreen</key>
+	<true/>
+
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Used to open and play video files you select.</string>
+</dict>
+</plist>
