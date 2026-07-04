@@ -5,10 +5,23 @@ iOS counterpart to [mpv-android](https://github.com/mpv-android/mpv-android):
 same libmpv core, same dependency stack, ported to Apple's toolchain and
 Swift/SwiftUI instead of the NDK/JNI/Kotlin stack.
 
+## Contributing
+
+Contributions are welcome — see **[CONTRIBUTING.md](CONTRIBUTING.md)** for
+concrete areas where help is genuinely useful right now (signed release
+builds, real-device testing, a native app icon, player features, and
+more), plus code style and testing notes.
+
 ## Project layout
 
 ```
 mpv-ios/
+├── project.yml            # XcodeGen spec — generates the .xcodeproj for CI
+├── .github/workflows/
+│   ├── build.yml           # Builds Libmpv.xcframework on every push
+│   ├── release.yml         # Publishes it as a GitHub Release on version tags
+│   └── appetize-preview.yml # Builds the app + uploads to Appetize.io for
+│                            # free, interactive, no-Mac-needed simulator testing
 ├── buildscripts/          # Cross-compiles libmpv + deps → Libmpv.xcframework
 │   ├── download.sh
 │   ├── buildall.sh
@@ -23,6 +36,7 @@ mpv-ios/
     ├── MPVRootView.swift
     ├── MPVPlayerView.swift
     ├── PlayerViewModel.swift
+    ├── Assets.xcassets/    # App icon + in-app logo (derived from mpv-android's icon)
     └── Info.plist
 ```
 
@@ -70,6 +84,17 @@ high-resolution version before shipping to the App Store — the upscale is
 clean enough for development/TestFlight but a from-scratch 1024×1024 (or an
 SVG re-export, since mpv-android's `mpv_logo.xml` is a vector drawable) will
 look sharper on device.
+
+## Testing without a Mac or a physical iPhone
+
+You still need a Mac to *build* this project (Apple's toolchain doesn't run
+elsewhere), but you do **not** need a Mac or an iPhone to *interact with*
+the built app afterward. See **[TESTING.md](TESTING.md)** for the complete
+step-by-step walkthrough (account setup, secrets, first run, what to
+expect). Short version: `.github/workflows/appetize-preview.yml` builds
+the app for the iOS Simulator (unsigned, no Apple Developer account
+needed) and uploads it to [Appetize.io](https://appetize.io), which streams
+a real, tappable virtual iPhone into your browser for free.
 
 ## Build steps
 
