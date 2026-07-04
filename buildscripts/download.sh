@@ -2,8 +2,6 @@
 
 . ./include/depinfo.sh
 
-[ -z "$WGET" ] && WGET=curl -L -o
-
 fetch_targz () {
 	# fetch_targz <url> <destdir>
 	mkdir -p "$2"
