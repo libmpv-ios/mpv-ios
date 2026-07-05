@@ -15,7 +15,7 @@ XCFramework instead of `.so` + Gradle).
 - Xcode + Command Line Tools: `xcode-select --install`
 - Homebrew packages:
   ```
-  brew install meson ninja pkg-config gnu-sed nasm autoconf automake libtool
+  brew install meson ninja pkg-config gnu-sed nasm autoconf automake libtool coreutils
   ```
 - `git`, `curl` (both ship with macOS)
 
@@ -98,6 +98,16 @@ Notable differences from the Android build:
   `libmpv-combined.a` per platform via `libtool -static`, then wrapped in an
   XCFramework — App Store apps can't casually ship arbitrary `.dylib`s the
   way Android apps ship `.so` files.
+- **Lua's `os.execute()` is stubbed out.** iOS's SDK marks `system(3)` as
+  explicitly unavailable (App Store sandboxing forbids arbitrary shell
+  execution), which is a hard compile error, not just a runtime failure.
+  `-DLUA_USE_IOS` alone doesn't fix this on the Lua 5.2.4 this project
+  pins (that guard was only added in Lua 5.4, and mpv itself will never
+  support Lua 5.3+ — see `lua.sh`'s comments for the full explanation), so
+  `lua.sh` force-includes a small header that redefines `system()` to a
+  stub before it's ever referenced. `os.execute()` calls from any Lua
+  script become a no-op reporting failure, rather than the build failing
+  to compile at all.
 
 ## Output
 
