@@ -23,7 +23,7 @@ jobs:
 
       - name: Install build tools
         run: |
-          brew install meson ninja pkg-config gnu-sed nasm autoconf automake libtool
+          brew install meson ninja pkg-config gnu-sed nasm autoconf automake libtool coreutils
 
       - name: Export cache key
         run: ./include/ci.sh export >>"$GITHUB_ENV"
