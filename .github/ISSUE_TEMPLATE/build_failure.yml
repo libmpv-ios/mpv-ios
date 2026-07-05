@@ -1,0 +1,83 @@
+name: Build / CI Failure
+description: The buildscripts pipeline or a GitHub Actions workflow failed
+title: "[Build]: "
+labels: ["build", "ci"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for failures in `buildscripts/` (cross-compiling
+        libmpv and its dependencies) or in any `.github/workflows/*.yml`
+        run. This is a common category for this project since it involves
+        a long dependency chain (mbedtls, dav1d, ffmpeg, freetype, fribidi,
+        harfbuzz, unibreak, libass, lua, libplacebo, mpv) — most failures
+        so far have been narrow, fixable issues (bash version differences,
+        missing execute permissions, path resolution), so full logs really
+        do help resolve these quickly.
+
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where did the failure happen?
+      options:
+        - Local build on my own Mac
+        - GitHub Actions - build.yml
+        - GitHub Actions - release.yml
+        - GitHub Actions - appetize-preview.yml
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: step
+    attributes:
+      label: Which step or script failed?
+      description: "e.g. 'Build for iOS Simulator (unsigned)', or a specific script like buildscripts/scripts/ffmpeg.sh"
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Full error log
+      description: |
+        Paste the complete output of the failed step, not just the last
+        line — for compiler/linker errors especially, the actual failure is
+        often several lines above the final "Process completed with exit
+        code" message. For GitHub Actions: expand the failed step and copy
+        everything in it.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version (for local builds)
+      placeholder: "e.g. macOS 14.5 Sonoma"
+    validations:
+      required: false
+
+  - type: input
+    id: xcode-version
+    attributes:
+      label: Xcode version
+      placeholder: "e.g. Xcode 16.2"
+    validations:
+      required: false
+
+  - type: input
+    id: commit
+    attributes:
+      label: Commit you were building from
+      description: "Run `git rev-parse HEAD`, or link the Actions run URL."
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: What you've already tried
+      description: Any troubleshooting steps you've already attempted, so they aren't suggested again.
+    validations:
+      required: false

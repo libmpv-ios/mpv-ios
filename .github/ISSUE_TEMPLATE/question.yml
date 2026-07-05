@@ -1,0 +1,32 @@
+name: Question
+description: Ask a question about using or building mpv-ios
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For "something is broken" or "please add X," use the Bug Report or
+        Feature Request templates instead — this one is for genuine
+        questions. Also check [README.md](../../README.md),
+        [TESTING.md](../../TESTING.md), and
+        [CONTRIBUTING.md](../../CONTRIBUTING.md) first, since common
+        questions (e.g. "do I need a Mac," "how do I test without an
+        iPhone," "why isn't there a Metal renderer") are already answered
+        there in detail.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What are you trying to do or understand?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: What you've already checked
+      description: Which docs/sections you've already read, so the answer doesn't just repeat them.
+    validations:
+      required: false

@@ -1,0 +1,110 @@
+name: Bug Report
+description: Report a problem with the app, MPVKit, or the build pipeline
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in as much
+        of the information below as you can — for playback and build
+        issues especially, logs are usually the difference between a bug
+        being fixable in minutes versus not being reproducible at all.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does this bug occur?
+      description: Helps route the issue to the right part of the project.
+      options:
+        - App UI (mpv-ios-player / SwiftUI screens)
+        - Playback (MPVKit core, MPVGLView rendering)
+        - Build pipeline (buildscripts/, XCFramework assembly)
+        - CI / GitHub Actions workflow
+        - Documentation
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect to happen instead?
+      placeholder: |
+        Example: When opening an .mkv file with an embedded ASS subtitle track,
+        the app crashes on launch of the player screen instead of showing the video.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Step-by-step instructions. If it's not consistently reproducible, say so and describe how often it happens.
+      placeholder: |
+        1. Open the app, tap "Open URL"
+        2. Paste a direct link to an .mkv file
+        3. Tap Play
+        4. App crashes immediately
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        For playback/crash issues: in Xcode, Window → Devices and Simulators →
+        select your device/simulator → View Device Logs, or attach the console
+        output if running from Xcode directly. For CI/build issues: paste the
+        relevant section of the GitHub Actions log (Actions tab → the failed
+        run → the failed step → expand it).
+      render: shell
+    validations:
+      required: false
+
+  - type: input
+    id: ios-version
+    attributes:
+      label: iOS / iPadOS version (if applicable)
+      placeholder: "e.g. iOS 17.4"
+    validations:
+      required: false
+
+  - type: input
+    id: device
+    attributes:
+      label: Device or Simulator model (if applicable)
+      placeholder: "e.g. iPhone 15 Pro, or 'iPhone 15 Simulator'"
+    validations:
+      required: false
+
+  - type: input
+    id: xcode-version
+    attributes:
+      label: Xcode version (for build issues)
+      placeholder: "e.g. Xcode 16.2"
+    validations:
+      required: false
+
+  - type: input
+    id: commit
+    attributes:
+      label: Commit / tag you're building from or running
+      description: "Run `git rev-parse HEAD` in the repo, or note the release tag."
+      placeholder: "e.g. a1b2c3d or v1.0.0"
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional information
+      description: |
+        If the issue only reproduces with a specific file, a short sample
+        (or a public direct link to one) is extremely helpful. If it
+        relates to specific mpv options, include the relevant `mpv.conf` or
+        `MPVConfiguration` values.
+    validations:
+      required: false

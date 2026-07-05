@@ -1,0 +1,155 @@
+name: appetize-preview
+
+# Builds mpv-ios-player for the iOS Simulator (no Apple Developer account or
+# code signing needed — CODE_SIGNING_ALLOWED=NO) and uploads the resulting
+# .app to Appetize.io, giving you a shareable browser URL where you can
+# interact with a real virtual iPhone (tap, swipe, scroll) entirely for
+# free, with no Mac and no physical iPhone.
+#
+# ---------------------------------------------------------------------------
+# IMPORTANT CAVEAT — read before relying on this workflow:
+#
+# This workflow needs MPVKit/Frameworks/Libmpv.xcframework to exist before
+# mpv-ios-player can build. That framework is large (100MB+ once
+# ffmpeg/libass/libplacebo/etc are merged in) and is NOT committed to this
+# repository by default — committing large binaries to a normal Git repo is
+# generally avoided (GitHub's 100MB per-file hard limit, repo bloat).
+#
+# This workflow's default approach: download it from your most recent
+# GitHub Release (produced by release.yml, which already builds and
+# attaches Libmpv.xcframework.zip). This means release.yml must have run
+# successfully at least once (i.e. you pushed a `vX.Y.Z` tag) before this
+# workflow can produce a working build. If no release exists yet, this
+# workflow will fail clearly at the "Download Libmpv.xcframework" step
+# with an explanatory message rather than failing confusingly later.
+#
+# Alternatives if you don't want to cut releases just for this:
+#   - Git LFS: `git lfs track "*.xcframework/**"`, commit through LFS, add
+#     `lfs: true` to the checkout step below. Free tier is limited
+#     (verify current GitHub LFS quotas before relying on it).
+#   - Build it fresh here by calling buildscripts/include/ci.sh directly —
+#     correct, but turns every preview into a ~30-60 minute full rebuild.
+# ---------------------------------------------------------------------------
+#
+# Setup required (one-time, free):
+#   1. Create a free account at https://appetize.io
+#   2. Copy your API token from Account -> API Token
+#   3. In this repo: Settings -> Secrets and variables -> Actions ->
+#      New repository secret -> name it APPETIZE_API_TOKEN, paste the token
+#   4. (Optional, recommended after the first successful run) Appetize's
+#      free tier allows a limited number of distinct apps. To keep reusing
+#      the same preview URL instead of creating a new app every run, copy
+#      the "publicKey" printed in this workflow's log after the first run,
+#      add it as a repository VARIABLE (Settings -> Secrets and variables
+#      -> Actions -> Variables tab) named APPETIZE_PUBLIC_KEY.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths:
+      - 'mpv-ios-player/**'
+      - 'MPVKit/Sources/**'
+
+jobs:
+  build-and-preview:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Select latest available Xcode
+        run: |
+          LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          echo "Using $LATEST"
+          sudo xcode-select -s "$LATEST/Contents/Developer"
+          xcodebuild -version
+
+      - name: Download Libmpv.xcframework from a release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # This is the upstream/original project's repo — the one that
+          # actually publishes Libmpv.xcframework.zip via release.yml.
+          # Contributors testing from a fork do NOT need to build and
+          # publish their own framework release; this step fetches the
+          # already-built one from upstream so a fork only ever needs to
+          # touch mpv-ios-player/ or MPVKit/Sources/ to test UI/API changes.
+          # If you're the maintainer running this on the main repo itself
+          # (github.repository already equals UPSTREAM_REPO), the "current
+          # repo" fallback below is what actually gets used.
+          UPSTREAM_REPO: "OWNER/mpv-ios"
+        run: |
+          mkdir -p MPVKit/Frameworks
+
+          echo "Trying upstream repo ($UPSTREAM_REPO) first..."
+          if gh release download --repo "$UPSTREAM_REPO" --pattern "Libmpv.xcframework.zip" --dir /tmp --clobber 2>/tmp/gh-err-upstream.txt; then
+            echo "Downloaded from upstream ($UPSTREAM_REPO)."
+          elif gh release download --pattern "Libmpv.xcframework.zip" --dir /tmp --clobber 2>/tmp/gh-err-local.txt; then
+            echo "Upstream fetch failed; downloaded from this repository's own releases instead."
+          else
+            echo "::error::Could not download Libmpv.xcframework.zip from either the upstream"
+            echo "::error::repo ($UPSTREAM_REPO) or this repository's own releases."
+            echo "::error::If you're a contributor testing from a fork, this usually means the"
+            echo "::error::upstream project hasn't published a release yet, or UPSTREAM_REPO in"
+            echo "::error::this workflow needs updating to point at the current main repo."
+            echo "--- upstream attempt error ---"; cat /tmp/gh-err-upstream.txt 2>/dev/null
+            echo "--- local attempt error ---"; cat /tmp/gh-err-local.txt 2>/dev/null
+            exit 1
+          fi
+
+          ditto -x -k /tmp/Libmpv.xcframework.zip MPVKit/Frameworks/
+          test -d MPVKit/Frameworks/Libmpv.xcframework
+
+      - name: Install xcodegen and xcbeautify
+        run: brew install xcodegen xcbeautify
+
+      - name: Generate Xcode project
+        run: xcodegen generate --spec project.yml
+
+      - name: Build for iOS Simulator (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project MPVIOSPlayer.xcodeproj \
+            -scheme MPVIOSPlayer \
+            -sdk iphonesimulator \
+            -configuration Debug \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build | xcbeautify
+
+      - name: Locate and zip the .app bundle
+        run: |
+          APP_PATH=$(find build -name "*.app" -path "*iphonesimulator*" -print -quit)
+          if [ -z "$APP_PATH" ]; then
+            echo "::error::No .app bundle found under build/. Check the build log above for errors."
+            exit 1
+          fi
+          echo "Found app at $APP_PATH"
+          cd "$(dirname "$APP_PATH")"
+          zip -r -q "$GITHUB_WORKSPACE/mpv-ios-preview.zip" "$(basename "$APP_PATH")"
+
+      - name: Upload to Appetize.io (new app)
+        if: ${{ !vars.APPETIZE_PUBLIC_KEY }}
+        uses: appetizeio/github-action-appetize@v1.0.5
+        with:
+          apiToken: ${{ secrets.APPETIZE_API_TOKEN }}
+          appFile: mpv-ios-preview.zip
+          platform: 'ios'
+          note: 'mpv-ios-player automated preview build'
+
+      - name: Upload to Appetize.io (update existing app)
+        if: ${{ vars.APPETIZE_PUBLIC_KEY }}
+        uses: appetizeio/github-action-appetize@v1.0.5
+        with:
+          apiToken: ${{ secrets.APPETIZE_API_TOKEN }}
+          appFile: mpv-ios-preview.zip
+          publicKey: ${{ vars.APPETIZE_PUBLIC_KEY }}
+          platform: 'ios'
+
+      - name: Print instructions
+        run: |
+          echo "Preview build uploaded."
+          echo "Open https://appetize.io/dashboard to find your app and its shareable URL."
+          echo "If this was your first run, copy the printed publicKey and save it as a"
+          echo "repository VARIABLE (not secret) named APPETIZE_PUBLIC_KEY so future runs"
+          echo "update the same app/URL instead of creating a new one."

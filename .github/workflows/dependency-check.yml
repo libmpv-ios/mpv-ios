@@ -1,0 +1,111 @@
+name: dependency-check
+
+# Dependabot (see .github/dependabot.yml) covers the GitHub Actions used in
+# this repo's workflows, but it has no ecosystem for versions pinned
+# inside a shell script (buildscripts/include/depinfo.sh's v_lua=5.2.4,
+# v_freetype=2.14.3, etc.) — there's no manifest format for it to parse.
+# This workflow fills that specific gap: once a week, it checks each
+# pinned dependency's latest GitHub release/tag and opens a PR if a newer
+# one exists.
+#
+# Deliberately not covered here: mpv, ffmpeg, dav1d, libass, libplacebo.
+# Those are already cloned from their latest default git branch on every
+# build (see download.sh) — there's no fixed version to check or bump for
+# them, every run already gets current upstream HEAD.
+#
+# Each dependency gets its OWN pull request, not one combined "bump
+# everything" PR. This is intentional: a version bump can break the build
+# (see the real example that motivated this workflow — libxml2 2.15.3
+# removed the -Dftp meson option entirely, breaking libxml2.sh). Separate
+# PRs mean a broken bump is isolated and obvious, rather than buried in a
+# combined commit where it's unclear which of five simultaneous bumps
+# actually caused a CI failure.
+#
+# PRs opened here are NOT auto-merged. Each one still needs build.yml to
+# pass and a human to review it before merging — a green CI run is a good
+# signal but not a substitute for noticing e.g. a silent behavior change
+# that happens to still compile.
+
+on:
+  schedule:
+    # Mondays at 09:00 UTC. Cron schedules on forks are disabled by
+    # default after 60 days of repo inactivity (a GitHub-wide anti-spam
+    # measure) — this only matters for the upstream/main repo; forks
+    # don't need this workflow at all since they pull the framework from
+    # upstream (see appetize-preview.yml and TESTING.md).
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-dependencies:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dependency: [lua, unibreak, harfbuzz, fribidi, freetype, mbedtls, libxml2]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check for update
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          chmod +x buildscripts/include/check-and-update-version.sh
+          if buildscripts/include/check-and-update-version.sh "${{ matrix.dependency }}" > /tmp/result.txt; then
+            echo "updated=true" >>"$GITHUB_OUTPUT"
+            cat /tmp/result.txt >>"$GITHUB_OUTPUT"
+          else
+            echo "updated=false" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Create branch and commit
+        if: steps.check.outputs.updated == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          branch="deps/${{ matrix.dependency }}-${{ steps.check.outputs.NEW_VERSION }}"
+          git checkout -b "$branch"
+          git add buildscripts/include/depinfo.sh
+          git commit -m "build(deps): bump ${{ matrix.dependency }} ${{ steps.check.outputs.OLD_VERSION }} -> ${{ steps.check.outputs.NEW_VERSION }}"
+          git push origin "$branch" --force
+
+      - name: Ensure 'dependencies' label exists
+        if: steps.check.outputs.updated == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create dependencies --color "0366d6" --description "Dependency version bumps" 2>/dev/null || true
+
+      - name: Open pull request
+        if: steps.check.outputs.updated == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="deps/${{ matrix.dependency }}-${{ steps.check.outputs.NEW_VERSION }}"
+          default_branch="${{ github.event.repository.default_branch }}"
+
+          existing=$(gh pr list --head "$branch" --json number --jq 'length')
+          if [ "$existing" -gt 0 ]; then
+            echo "PR for $branch already exists, skipping."
+            exit 0
+          fi
+
+          gh pr create \
+            --title "build(deps): bump ${{ matrix.dependency }} to ${{ steps.check.outputs.NEW_VERSION }}" \
+            --body "Bumps \`${{ matrix.dependency }}\` from \`${{ steps.check.outputs.OLD_VERSION }}\` to \`${{ steps.check.outputs.NEW_VERSION }}\` in \`buildscripts/include/depinfo.sh\`.
+
+          Opened automatically by the \`dependency-check\` workflow — Dependabot doesn't cover this since the version is pinned in a shell script, not a manifest file it understands.
+
+          **Before merging:**
+          - [ ] Wait for \`build\` (CI) to pass on this PR — it will run the full cross-compilation pipeline including this dependency.
+          - [ ] If CI fails, check whether the new version removed/renamed/changed the meaning of any meson or autotools flag used in \`buildscripts/scripts/${{ matrix.dependency }}.sh\` — this has happened before (libxml2 2.14 removed its \`ftp\` meson option entirely).
+          - [ ] Skim the upstream release notes for anything else relevant (security fixes worth prioritizing, breaking changes worth noting in a commit comment).
+
+          This PR only bumps the version number. If CI fails, the fix belongs in \`buildscripts/scripts/${{ matrix.dependency }}.sh\` as a follow-up commit on this same branch, not a reason to close and ignore the bump entirely — most such breaks are a one-line flag fix." \
+            --label "dependencies" \
+            --base "$default_branch"

@@ -1,0 +1,53 @@
+name: Feature Request
+description: Suggest a new feature or improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before requesting a feature, please check
+        [existing feature requests](../labels/enhancement) to avoid duplicates.
+        See [CONTRIBUTING.md](../../CONTRIBUTING.md) for a list of areas
+        where help is already known to be needed — your idea might already
+        be tracked there.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the feature
+      description: What should the app/library do that it doesn't do now?
+      placeholder: |
+        Example: Add gesture-based seeking (swipe left/right on the video
+        to seek), similar to mpv-android's touch gesture support.
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: Why do you want this? What problem does it solve for you or other users?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where would this apply?
+      options:
+        - App UI / player controls (mpv-ios-player)
+        - MPVKit core API (MPVCore, MPVPlayer, MPVProperty)
+        - Rendering (MPVGLView)
+        - Build pipeline / CI
+        - Other / not sure
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional information
+      description: Mockups, links to how other apps (mpv-android, IINA, VLC) implement something similar, or any other relevant context.
+    validations:
+      required: false

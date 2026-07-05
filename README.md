@@ -10,7 +10,9 @@ Swift/SwiftUI instead of the NDK/JNI/Kotlin stack.
 Contributions are welcome — see **[CONTRIBUTING.md](CONTRIBUTING.md)** for
 concrete areas where help is genuinely useful right now (signed release
 builds, real-device testing, a native app icon, player features, and
-more), plus code style and testing notes.
+more), plus code style and testing notes. See **[ROADMAP.md](ROADMAP.md)**
+for the bigger picture — where the project stands today and what's planned
+across each upcoming phase.
 
 ## Project layout
 

@@ -76,11 +76,58 @@ toward iOS actually having that option.
    what you still need to do" and "Architecture notes" — so you know what's
    already been tried, and why some earlier approaches (e.g. a Metal render
    backend) were abandoned for what's here now.
-2. You'll need a Mac to build and test changes to `MPVKit` or
+2. Check [ROADMAP.md](ROADMAP.md) for the current phase and priorities —
+   it explains *why* certain things are sequenced the way they are (e.g.
+   why player features come after real-device validation, not before).
+3. You'll need a Mac to build and test changes to `MPVKit` or
    `buildscripts/`. Pure documentation or workflow-file contributions can
    often be done without one.
-3. Open an issue before starting large changes, so effort isn't duplicated
-   or spent on something that won't fit the project's direction.
+4. See "How to contribute, step by step" below before opening a PR —
+   almost every contribution should start with an issue, not a PR directly.
+
+## How to contribute, step by step
+
+This project uses the issue templates under `.github/ISSUE_TEMPLATE/` as
+the required starting point for any non-trivial contribution. This isn't
+bureaucracy for its own sake — it exists because:
+
+- it gives a place to confirm an approach *before* time is spent writing
+  code that might not fit the project's direction,
+- it prevents two people from independently working on the same thing, and
+- for bug fixes especially, the structured fields (device/OS/Xcode version,
+  full logs, reproduction steps) are usually what actually makes a fix
+  possible — a PR that "fixes a bug" no one can reproduce is much harder to
+  review and merge than one with a linked issue containing the full context.
+
+**The process:**
+
+1. **Search first.** Check [open and closed issues](../../issues?q=is%3Aissue)
+   and [open PRs](../../pulls) for anything related to what you're about to
+   do. If it's already tracked, comment there instead of opening a
+   duplicate.
+2. **Open an issue using the right template** (Issues → New Issue):
+   - Found something broken? Use **Bug Report**.
+   - Hit a failure in `buildscripts/` or a GitHub Actions run? Use
+     **Build / CI Failure** — it asks for the exact step and full log,
+     which is almost always what's needed to actually diagnose a
+     cross-compilation issue.
+   - Want to propose something new (a player feature, an API addition to
+     MPVKit, etc.)? Use **Feature Request**, including the use case, not
+     just the ask.
+   - Not sure, or just want clarification on how something works? Use
+     **Question** — but check README.md/TESTING.md/CONTRIBUTING.md first,
+     since many common questions are already answered there.
+3. **Wait for a signal before starting large work.** For small, obvious
+   fixes (a typo, a broken link, an off-by-one in a comment) feel free to
+   just open the PR and reference "Closes #<issue-number>" in it. For
+   anything larger — a new feature, a refactor, a new workflow — wait for
+   at least a brief acknowledgment on the issue first. This is the single
+   biggest thing that prevents wasted effort on both sides.
+4. **Reference the issue in your PR.** Use a closing keyword
+   (`Closes #123`, `Fixes #123`) in the PR description so it links
+   automatically and closes the issue when merged.
+5. **Follow the code style and testing notes below** before requesting
+   review.
 
 ## Where help is genuinely needed right now
 
@@ -119,12 +166,20 @@ code.
 `buildscripts/include/depinfo.sh` pins exact versions for `lua`, `freetype`,
 `harfbuzz`, `fribidi`, `mbedtls`, `libxml2`, and `unibreak`. These aren't
 covered by Dependabot (see `.github/dependabot.yml`'s comments for why —
-no package-ecosystem exists for versions embedded in a shell script).
-Periodically checking these against upstream releases and opening a PR
-bumping them (one dependency at a time, so a break is easy to bisect) is a
-small, well-scoped way to help. `mpv`, `ffmpeg`, `dav1d`, `libass`, and
-`libplacebo` are already built from their latest default branch on every
-run, so those don't need manual bumps.
+no package-ecosystem exists for versions embedded in a shell script), so
+`.github/workflows/dependency-check.yml` runs weekly and opens a PR
+automatically whenever one of these has a newer upstream release. `mpv`,
+`ffmpeg`, `dav1d`, `libass`, and `libplacebo` are already built from their
+latest default branch on every run, so those don't need version bumps at
+all.
+
+You don't need to open these bump PRs yourself — where help is genuinely
+useful is **reviewing and fixing them** when CI fails on one. A version
+bump can break the build (a real example: libxml2 2.14 removed its `ftp`
+meson option entirely, breaking the flag `libxml2.sh` was passing) —
+turning a red CI run on one of these PRs into a green one, usually by
+updating a flag in the corresponding `buildscripts/scripts/<dep>.sh`, is a
+small, well-scoped, and genuinely helpful contribution.
 
 ### Player features
 Compared to mpv-android's PlayerActivity, `MPVPlayerView`/`PlayerViewModel`
@@ -174,14 +229,9 @@ failure not already covered, a fix plus a one-line comment explaining *why*
   failures during this project's development, and both are free to catch
   locally.
 
-## Reporting bugs
+## Thank you
 
-Open a GitHub issue with:
-- What you were doing and what you expected to happen
-- The actual error (full text — for CI failures, the relevant section of
-  the Actions log; for runtime issues, device/Simulator model and iOS
-  version)
-- Whether it's reproducible
-
-Thank you for considering contributing — even small fixes (a typo in a
-comment, a broken link, a version bump) are genuinely appreciated.
+Even small fixes — a typo in a comment, a broken link, a version bump —
+are genuinely appreciated. See "How to contribute, step by step" above for
+the process, and the issue templates under `.github/ISSUE_TEMPLATE/` to get
+started.
