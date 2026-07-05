@@ -76,7 +76,7 @@ jobs:
           # If you're the maintainer running this on the main repo itself
           # (github.repository already equals UPSTREAM_REPO), the "current
           # repo" fallback below is what actually gets used.
-          UPSTREAM_REPO: "OWNER/mpv-ios"
+          UPSTREAM_REPO: "AeonCoreX-Lab/mpv-ios"
         run: |
           mkdir -p MPVKit/Frameworks
 

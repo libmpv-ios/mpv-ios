@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
   - name: Read the README first
-    url: https://github.com/OWNER/mpv-ios/blob/main/README.md
+    url: https://github.com/AeonCoreX-Lab/mpv-ios/blob/main/README.md
     about: Covers build steps, project layout, and known architecture decisions/limitations.
   - name: Testing without a Mac or iPhone
-    url: https://github.com/OWNER/mpv-ios/blob/main/TESTING.md
+    url: https://github.com/AeonCoreX-Lab/mpv-ios/blob/main/TESTING.md
     about: How to test the app via Appetize.io without owning a Mac or physical iPhone.
   - name: Contributing guide
-    url: https://github.com/OWNER/mpv-ios/blob/main/CONTRIBUTING.md
+    url: https://github.com/AeonCoreX-Lab/mpv-ios/blob/main/CONTRIBUTING.md
     about: Concrete areas where help is needed, plus code style and testing notes.

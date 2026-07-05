@@ -15,7 +15,7 @@ or push anything from scratch. Instead:
    your own copy under your account.
 2. Clone your fork locally:
    ```bash
-   git clone https://github.com/<your-username>/mpv-ios.git
+   git clone https://github.com/AeonCoreX-Lab/mpv-ios.git
    cd mpv-ios
    ```
 3. That's it for this step — everything below (secrets, variables, running
