@@ -89,6 +89,9 @@ unset CC CXX
 # way the avfoundation patches are — it would mean building an iOS
 # feature that doesn't exist yet upstream, well beyond this project's
 # current scope.
+# Force clear any stale meson telemetry or cache inside the build dir
+rm -rf "$build"
+
 meson setup $build --cross-file "$prefix_dir"/crossfile.txt \
 	--default-library=static \
 	-Diconv=disabled -Dlua=enabled \
