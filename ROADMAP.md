@@ -123,18 +123,95 @@ Longer-horizon, lower-urgency items:
       player controls) — not yet done.
 - [ ] Performance profiling on lower-end/older supported devices (current
       deployment target is iOS 15.0, per `project.yml`).
+- [ ] **Vulkan via MoltenVK, as a second render backend alongside OpenGL
+      ES.** Investigated in depth (see the corresponding closed
+      discussion/issue for the full research trail) but not started —
+      documenting the findings here so whoever picks this up next isn't
+      starting from zero.
+
+      **What's confirmed possible:** libmpv has no Metal render-API
+      backend (see "Explicitly not planned" below), but mpv *does*
+      support Vulkan as a `gpu-next`/libplacebo backend, and MoltenVK
+      layers Vulkan on top of Metal on Apple platforms — including iOS,
+      officially, App-Store-distributable, using only public Apple APIs
+      (no private API usage). The specific integration point is
+      `VK_EXT_metal_surface` (`vkCreateMetalSurfaceEXT`), which creates a
+      `VkSurfaceKHR` directly from a `CAMetalLayer` — critically, this
+      does **not** require `NSApplication`/AppKit the way mpv's existing
+      macOS Vulkan context (`video/out/vulkan/context_mac.m`) does, so
+      the reason that file doesn't work on iOS doesn't apply to a
+      from-scratch iOS context using this extension.
+
+      **What this would actually take** (verified against mpv's real
+      source, not guessed):
+      1. A new `video/out/vulkan/context_ios.m` — modeled on
+         `video/out/vulkan/context_android.c` (104 lines, no desktop
+         windowing dependency, creates its `VkSurfaceKHR` directly from a
+         native window handle via `vkCreateAndroidSurfaceKHR` — the iOS
+         equivalent would use `vkCreateMetalSurfaceEXT` with a
+         `CAMetalLayer` the same way). This is a new file, not a patch to
+         anything existing.
+      2. A small registration patch to `video/out/gpu/context.c` (an
+         `extern` declaration plus one array entry, following the exact
+         pattern already used for `ra_ctx_vulkan_android`).
+      3. A `meson.build`/`meson.options` change: a new feature option
+         (e.g. `ios-vulkan`), conditionally compiling the new context file,
+         and defining `VK_USE_PLATFORM_METAL_EXT` for the iOS target.
+      4. `buildscripts/`: re-enable `-Dvulkan=enabled` in `mpv.sh` (currently
+         force-disabled — see that script's comments), and a **new**
+         `buildscripts/scripts/moltenvk.sh` to cross-compile MoltenVK
+         itself for iOS. Note: Homebrew's `molten-vk` formula was checked
+         and does **not** help here — it only builds MoltenVK's macOS
+         slice, not iOS, so it can't be used as a shortcut the way some
+         other dependencies might be. MoltenVK's own build is Xcode-project-
+         based (`MoltenVKPackaging.xcodeproj`, via its `fetchDependencies`
+         script pulling in SPIRV-Cross/glslang/Vulkan-Headers/cereal), not
+         meson/autotools like this project's other dependencies, so
+         `moltenvk.sh` would need a genuinely different shape than the
+         existing dependency scripts.
+      5. `libplacebo`'s build flags would need `-Dvulkan` re-enabled
+         (currently disabled — see `libplacebo.sh`'s comments) once
+         MoltenVK is available to link against.
+
+      **Why this hasn't been started:** the honest blocker is that none
+      of the above can be test-compiled without a Mac (the same
+      constraint noted throughout this project), and this particular
+      change touches five different files/scripts across two build
+      systems (meson and Xcode-project-based) with no working reference
+      commit in this project to iteratively debug against the way, e.g.,
+      the `avfoundation` audio patches could be — those were fixed by
+      reading real CI compiler errors one at a time. A change this size
+      attempted "blind" risks many rounds of guess-and-check once a Mac
+      *is* available, rather than a clean first attempt. Good next step
+      for someone with sustained Mac access and comfort debugging Xcode
+      project builds, not a quick PR.
+
+      **Uncertain / not yet investigated:** how much this would actually
+      improve on the current OpenGL ES path in practice on real iOS
+      hardware — libplacebo's more advanced shader features are the
+      theoretical upside, but no benchmarking exists yet to confirm the
+      real-world difference is worth this integration cost. Worth
+      measuring on the existing OpenGL ES path's actual limitations
+      before assuming Vulkan is the right next step, not just because
+      it's more capable on paper.
 
 ## Explicitly not planned (for now)
 
 Worth stating directly, since "why doesn't this do X" is a natural
 question:
 
-- **A Metal render backend.** This was tried and abandoned early in the
-  project — libmpv's public render API doesn't have a Metal backend (only
-  OpenGL and software rendering exist; see the main README's "Architecture
-  notes" section for the full explanation). This isn't a "not yet," it's
-  a "the library doesn't support this," short of a much larger upstream
-  contribution to libmpv itself.
+- **A Metal render backend, specifically inside libmpv's public render
+  API.** This was tried and abandoned early in the project — libmpv's
+  render API (`mpv_render_context_create()` and friends) doesn't have a
+  Metal backend (only OpenGL and software rendering exist; see the main
+  README's "Architecture notes" section for the full explanation). This
+  isn't fixable with a small patch the way the `avfoundation` audio
+  output was — short of a much larger upstream contribution to libmpv
+  itself, there's no Metal `MPV_RENDER_API_TYPE_*` to target. **Note:**
+  this doesn't rule out Vulkan-via-MoltenVK as an indirect path to
+  Metal-backed rendering — see the Vulkan/MoltenVK item in Phase 4 above,
+  which is a different (and much larger) undertaking than what was ruled
+  out here.
 - **Android support in this repo.** This project exists because
   mpv-android already covers Android well — there's no plan to unify the
   two codebases; they're deliberately separate, platform-native

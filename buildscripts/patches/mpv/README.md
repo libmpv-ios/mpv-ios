@@ -44,6 +44,25 @@ iOS). These patches narrow those specific declarations/definitions to
 `HAVE_COREAUDIO` only, so `avfoundation` doesn't drag in code it never
 uses that can't compile on iOS.
 
+### 0006 — `ao_coreaudio_utils.c`: fix `ca_get_latency`'s guard too
+
+Found in CI after 0002 first shipped: `ca_get_latency()` still used
+`#if HAVE_COREAUDIO || HAVE_AVFOUNDATION` to decide whether to call
+`AudioConvertHostTimeToNanos`/`AudioGetCurrentHostTime` — both declared in
+`<CoreAudio/HostTime.h>`, which patch 0002 already narrowed the
+file's own `#include` of to `HAVE_COREAUDIO` only. That left an
+avfoundation-only iOS build calling two functions from a header no
+longer being included: "call to undeclared function" errors for both.
+The fix narrows this guard to match — `HAVE_COREAUDIO` only — so
+avfoundation-only builds correctly fall into the function's `#else`
+branch (a `mach_absolute_time`-based equivalent that needs no CoreAudio
+API at all), which was already there and already iOS-compatible, just
+not being selected. This is a good example of why patch 0002's own
+comment insists any new patch touching this file be checked against
+*every* guarded block in it, not just the one instance a compiler error
+happens to point at first — the same file had two instances of
+essentially the same mistake.
+
 ### 0004 / 0005 — `ao_coreaudio_chmap.{c,h}`: split device-independent functions
 
 Same situation as above in a different file: `ca_get_acl` (and its

@@ -1,0 +1,21 @@
+--- a/audio/out/ao_coreaudio_utils.c	2026-07-06 10:05:07.155032094 +0000
++++ b/audio/out/ao_coreaudio_utils.c	2026-07-06 10:05:17.079145866 +0000
+@@ -300,7 +300,17 @@
+ 
+ int64_t ca_get_latency(const AudioTimeStamp *ts)
+ {
+-#if HAVE_COREAUDIO || HAVE_AVFOUNDATION
++// NOTE: this guard must stay in sync with the #include guard near the top
++// of this file (CoreAudio/HostTime.h vs mach/mach_time.h) - it was
++// originally `#if HAVE_COREAUDIO || HAVE_AVFOUNDATION`, which called
++// AudioConvertHostTimeToNanos/AudioGetCurrentHostTime (declared in
++// CoreAudio/HostTime.h) even when only HAVE_AVFOUNDATION was set and that
++// header was no longer being included, causing "call to undeclared
++// function" errors. Narrowed to HAVE_COREAUDIO only so avfoundation-only
++// builds correctly take the #else (mach_absolute_time-based) branch below
++// instead, which is functionally equivalent and doesn't need CoreAudio's
++// HostTime API at all.
++#if HAVE_COREAUDIO
+     uint64_t out = AudioConvertHostTimeToNanos(ts->mHostTime);
+     uint64_t now = AudioConvertHostTimeToNanos(AudioGetCurrentHostTime());
+ 
