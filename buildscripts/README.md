@@ -128,6 +128,18 @@ Notable differences from the Android build:
   what each patch does and why. This is what lets `mpv.sh` re-enable
   `-Davfoundation=enabled` (mpv's more modern audio output, with spatial
   audio support) instead of only the more limited `audiounit`.
+- **Autotools Simulator Host Triple Compatibility.** Legacy autotools-based 
+  dependencies (such as `fribidi`, `harfbuzz`, and `libxml2`) carry outdated 
+  `config.sub` scripts that do not recognize modern Apple simulator target triples 
+  (e.g., `aarch64-apple-ios-simulator` or `x86_64-apple-ios-simulator`). Rather than 
+  manually bootstrapping or updating `config.sub` inside every extraction root 
+  during runtime, `buildall.sh` dynamically overrides the `host_triple` variable 
+  to a generic Darwin target (`aarch64-apple-darwin` / `x86_64-apple-darwin`) 
+  strictly for the simulator configurations. This satisfies the validation constraints 
+  of legacy `configure` setups while the actual underlying compilation architecture, 
+  sysroot, and deployment constraints remain locked to the iOS Simulator platform 
+  via explicit environment flags passed into `CC` and `LDFLAGS`.
+
 
 ## Output
 
