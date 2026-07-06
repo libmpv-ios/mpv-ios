@@ -145,6 +145,10 @@ system = 'darwin'
 cpu_family = '$meson_cpu_family'
 cpu = '$arch'
 endian = 'little'
+
+[properties]
+# Hard-override to prevent meson from breaking on unsupported platform -Bsymbolic tests
+b_symbolic = false
 CROSSFILE
 	if cmp -s "$prefix_dir"/crossfile.{tmp,txt} 2>/dev/null; then
 		rm "$prefix_dir/crossfile.tmp"
