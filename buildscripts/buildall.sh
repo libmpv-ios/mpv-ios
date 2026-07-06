@@ -94,6 +94,16 @@ loadplatform () {
 	export PKG_CONFIG_SYSROOT_DIR="$prefix_dir"
 	export PKG_CONFIG_LIBDIR="$PKG_CONFIG_SYSROOT_DIR/lib/pkgconfig"
 	export PKG_CONFIG_PATH="$PKG_CONFIG_LIBDIR"
+
+	# Fix for 'aarch64-apple-ios-simulator/x86_64-apple-ios-simulator not recognized'
+	# This bypasses old autotools config.sub issues while preserving correct compiler targets.
+	if [[ "$platform" == *"simulator"* ]]; then
+		if [[ "$arch" == "x86_64" ]]; then
+			export host_triple="x86_64-apple-darwin"
+		else
+			export host_triple="aarch64-apple-darwin"
+		fi
+	fi
 }
 
 setup_prefix () {

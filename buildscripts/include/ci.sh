@@ -24,7 +24,7 @@ msg() {
 # would silently be masked by a stale cache still holding the old
 # crossfile.txt. Bump this integer any time buildall.sh's setup_prefix()
 # changes, even if no dependency version changed.
-CROSSFILE_REV=2
+CROSSFILE_REV=3
 
 cache_id() {
 	local platform=$1
