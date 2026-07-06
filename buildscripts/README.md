@@ -139,7 +139,7 @@ Notable differences from the Android build:
   of legacy `configure` setups while the actual underlying compilation architecture, 
   sysroot, and deployment constraints remain locked to the iOS Simulator platform 
   via explicit environment flags passed into `CC` and `LDFLAGS`.
-  - **Meson `-Bsymbolic` Linker Test Override.** During the `mpv` configuration 
+- **Meson `-Bsymbolic` Linker Test Override.** During the `mpv` configuration 
   step, modern Meson build scripts attempt to test whether the compiler and linker 
   support the `-Bsymbolic` flag. Because Apple's native linker (`ld`) does 
   not support symbolic linking flags, this configuration test can trigger invalid 
