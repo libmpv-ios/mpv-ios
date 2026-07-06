@@ -1,0 +1,25 @@
+--- a/audio/out/ao_coreaudio_chmap.c	2026-07-06 02:26:20.548288893 +0000
++++ b/audio/out/ao_coreaudio_chmap.c	2026-07-06 02:27:13.702491677 +0000
+@@ -337,7 +337,22 @@
+         *out_layout_size = layout_size;
+     return layout;
+ }
++#endif // HAVE_COREAUDIO || HAVE_AVFOUNDATION -- closes the guard opened
++       // near this file's top (around ca_find_standard_layout), which
++       // covers ca_find_standard_layout/ca_get_acl/ca_log_layout: all
++       // device-independent and safe to build for avfoundation's iOS use.
+ 
++// Everything below this point is only used by ca_init_chmap/
++// ca_get_active_chmap (see their definitions further down), both of which
++// take an AudioDeviceID and are CoreAudio HAL device-property queries with
++// no iOS equivalent. avfoundation.m never calls either of them (verified
++// directly against its source) - it only needs ca_get_acl above, which
++// takes no device parameter. Narrowing this to HAVE_COREAUDIO only (rather
++// than the HAVE_COREAUDIO || HAVE_AVFOUNDATION this whole file used to
++// share as one block) lets ca_get_acl build standalone for avfoundation's
++// iOS use without dragging in HAL device-query code that can't compile
++// there.
++#if HAVE_COREAUDIO
+ 
+ #define CHMAP(n, ...) &(struct mp_chmap) MP_CONCAT(MP_CHMAP, n) (__VA_ARGS__)
+ 

@@ -1,0 +1,28 @@
+--- a/audio/out/ao_coreaudio_utils.c	2026-07-06 02:23:46.045952633 +0000
++++ b/audio/out/ao_coreaudio_utils.c	2026-07-06 02:24:28.501505648 +0000
+@@ -28,14 +28,14 @@
+ #include "audio/format.h"
+ #include "osdep/mac/compat.h"
+ 
+-#if HAVE_COREAUDIO || HAVE_AVFOUNDATION
++#if HAVE_COREAUDIO
+ #include "audio/out/ao_coreaudio_properties.h"
+ #include <CoreAudio/HostTime.h>
+ #else
+ #include <mach/mach_time.h>
+ #endif
+ 
+-#if HAVE_COREAUDIO || HAVE_AVFOUNDATION
++#if HAVE_COREAUDIO
+ static bool ca_is_output_device(struct ao *ao, AudioDeviceID dev)
+ {
+     size_t n_buffers;
+@@ -323,7 +323,7 @@
+ #endif
+ }
+ 
+-#if HAVE_COREAUDIO || HAVE_AVFOUNDATION
++#if HAVE_COREAUDIO
+ bool ca_stream_supports_compressed(struct ao *ao, AudioStreamID stream)
+ {
+     AudioStreamRangedDescription *formats = NULL;

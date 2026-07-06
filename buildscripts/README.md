@@ -117,6 +117,17 @@ Notable differences from the Android build:
   handles C, C++, and Objective-C from the same binary depending on file
   extension, this just points `objc`/`objcpp` at the same `clang`/`clang++`
   already used for `c`/`cpp`. See `buildall.sh`'s `setup_prefix()`.
+- **mpv's source is patched for iOS before building.** A small number of
+  mpv's audio-output files (`ao_avfoundation.m` and the CoreAudio utility
+  files it shares code with) call macOS-only APIs from otherwise
+  iOS-compatible code paths. Rather than disabling those features
+  entirely, `buildscripts/patches/mpv/` contains small, targeted patches
+  that narrow the actual problem down to the specific unavailable
+  call/type, applied automatically by `download.sh` via
+  `include/apply-mpv-patches.sh`. See `patches/mpv/README.md` for exactly
+  what each patch does and why. This is what lets `mpv.sh` re-enable
+  `-Davfoundation=enabled` (mpv's more modern audio output, with spatial
+  audio support) instead of only the more limited `audiounit`.
 
 ## Output
 

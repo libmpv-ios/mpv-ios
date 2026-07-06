@@ -29,6 +29,41 @@ unset CC CXX
 #                       depends on AppKit/NSApplication and doesn't apply)
 # --Dlibmpv=true: build the C API library our Swift wrapper links against.
 # --Dcplayer=false: we don't need the mpv CLI player binary, only libmpv.
+#
+# UPDATED after adding buildscripts/patches/mpv/: -Dcoreaudio and
+# -Davfoundation were previously both force-disabled here after a CI
+# failure, because auto-detection had enabled both (Apple frameworks were
+# present) and both are audio outputs whose shared utility code
+# (audio/out/ao_coreaudio_utils.{c,h}, ao_coreaudio_chmap.{c,h}) referenced
+# AudioDeviceID/AudioStreamID (real CoreAudio HAL types that don't exist on
+# iOS) inside a shared `#if HAVE_COREAUDIO || HAVE_AVFOUNDATION` guard.
+#
+# We verified directly against mpv's own source that ao_avfoundation.m
+# itself never calls any of the actual AudioDeviceID-taking functions in
+# that shared code (only the genuinely device-independent ca_get_acl and
+# its dependencies) — the shared guard was simply too broad, grouping
+# device-independent and device-dependent code together. The patches in
+# patches/mpv/ narrow those guards so the device-independent parts stay
+# available to avfoundation while the true HAL-only parts become
+# coreaudio-exclusive. A separate patch also guards avfoundation.m's one
+# genuinely macOS-only call (device selection via
+# setAudioOutputDeviceUniqueID:, which Apple's own headers mark
+# unavailable on iOS) behind `#if !TARGET_OS_IPHONE`.
+#
+# With those patches applied (see download.sh, which calls
+# include/apply-mpv-patches.sh automatically), avfoundation now builds
+# correctly for iOS and is re-enabled below, giving mpv on iOS the more
+# modern AVSampleBufferAudioRenderer-based output (including things like
+# spatial audio support) in addition to audiounit.
+#
+# coreaudio itself (audio/out/ao_coreaudio.c, ao_coreaudio_exclusive.c)
+# remains disabled — those files are genuinely macOS-only in their
+# fundamental design (full HAL device enumeration/selection has no iOS
+# equivalent at all, unlike avfoundation's narrower, already-mostly-iOS
+# renderer API), so patching them wouldn't be "fixing an oversight" the
+# way the avfoundation patches are — it would mean building an iOS
+# feature that doesn't exist yet upstream, well beyond this project's
+# current scope.
 meson setup $build --cross-file "$prefix_dir"/crossfile.txt \
 	--default-library=static \
 	-Diconv=disabled -Dlua=enabled \
@@ -37,7 +72,8 @@ meson setup $build --cross-file "$prefix_dir"/crossfile.txt \
 	-Dgl=enabled -Dios-gl=enabled \
 	-Dvulkan=disabled -Dvdpau=disabled -Dvaapi=disabled -Ddrm=disabled \
 	-Dx11=disabled -Dwayland=disabled \
-	-Dcocoa=disabled
+	-Dcocoa=disabled \
+	-Dcoreaudio=disabled -Davfoundation=enabled -Daudiounit=enabled
 
 ninja -C $build -j$cores
 

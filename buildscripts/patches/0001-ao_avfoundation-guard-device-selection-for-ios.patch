@@ -1,0 +1,12 @@
+--- a/audio/out/ao_avfoundation.m
++++ b/audio/out/ao_avfoundation.m
+@@ -250,7 +250,9 @@
+     }
+ 
+     if (ao->device && ao->device[0]) {
++#if !TARGET_OS_IPHONE
+         [p->renderer setAudioOutputDeviceUniqueID:(NSString*)cfstr_from_cstr(ao->device)];
++#endif
+     }
+ 
+     [p->synchronizer addRenderer:p->renderer];

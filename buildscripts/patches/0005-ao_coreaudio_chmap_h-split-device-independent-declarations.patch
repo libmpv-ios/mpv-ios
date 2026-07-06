@@ -1,0 +1,18 @@
+--- a/audio/out/ao_coreaudio_chmap.h	2026-07-06 02:28:08.177386302 +0000
++++ b/audio/out/ao_coreaudio_chmap.h	2026-07-06 02:28:20.675254263 +0000
+@@ -30,6 +30,15 @@
+ AudioChannelLayout *ca_find_standard_layout(void *talloc_ctx, AudioChannelLayout *l);
+ AudioChannelLayout *ca_get_acl(struct ao *ao, size_t *out_layout_size);
+ void ca_log_layout(struct ao *ao, int l, AudioChannelLayout *layout);
++#endif
++
++// ca_init_chmap/ca_get_active_chmap take an AudioDeviceID (a CoreAudio HAL
++// device-property query with no iOS equivalent) and are never called from
++// ao_avfoundation.m (verified directly against its source) - only
++// ao_coreaudio.c and ao_coreaudio_exclusive.c (both macOS-only files, not
++// built for iOS) use them. Narrowed to HAVE_COREAUDIO only, matching the
++// corresponding split in ao_coreaudio_chmap.c.
++#if HAVE_COREAUDIO
+ bool ca_init_chmap(struct ao *ao, AudioDeviceID device);
+ void ca_get_active_chmap(struct ao *ao, AudioDeviceID device, int channel_count,
+                          struct mp_chmap *out_map);

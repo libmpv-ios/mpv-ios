@@ -95,4 +95,12 @@ fi
 [ ! -d mpv ] && git_clone_pinned https://github.com/mpv-player/mpv mpv "$v_ci_mpv"
 
 cd ..
+
+# Apply iOS-compatibility patches to mpv (see patches/mpv/README.md and
+# include/apply-mpv-patches.sh for what these do and why). Runs every time
+# download.sh runs, whether mpv was just freshly cloned above or already
+# existed from a previous run — the script itself detects and skips
+# already-applied patches safely.
+./include/apply-mpv-patches.sh
+
 echo "All sources downloaded into buildscripts/deps/"
