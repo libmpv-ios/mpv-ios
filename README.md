@@ -167,7 +167,7 @@ destination as above, or building via Xcode directly, is the normal path.)
 
 ## License note
 
-mpv and its dependency stack are GPL/LGPL-licensed (exact terms depend on
+mpv and its dependency stack are AGPL-3.0 licensed (exact terms depend on
 which options are enabled at build time — see `buildscripts/scripts/ffmpeg.sh`,
 which enables `--enable-gpl --enable-version3`). Distributing this app on the
 App Store means complying with those licenses (e.g. providing corresponding
