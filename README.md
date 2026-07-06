@@ -1,4 +1,8 @@
-# mpv-ios
+# mpv for IOS
+
+[![Build Status](https://github.com/AeonCoreX-Lab/mpv-ios/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/AeonCoreX-Lab/mpv-ios/actions/workflows/build.yml)
+
+mpv-ios is a video player for Android based on [libmpv](https://github.com/mpv-player/mpv).
 
 A production-oriented libmpv-based media player for iOS, structured as the
 iOS counterpart to [mpv-android](https://github.com/mpv-android/mpv-android):
