@@ -15,20 +15,30 @@ msg() {
 # since each slice's prefix/ contents are architecture-specific and must be
 # cached separately.
 #
-# CROSSFILE_REV below exists because crossfile.txt itself lives inside the
-# cached prefix/ directory (it's written by buildall.sh's setup_prefix()
-# alongside the actual compiled dependency output). A change to how
-# crossfile.txt is generated — e.g. adding the objc/objcpp binaries mpv's
-# meson.build needs to compile hwdec_ios_gl.m — does NOT change any
-# v_whatever dependency version, so without this marker such a change
-# would silently be masked by a stale cache still holding the old
-# crossfile.txt. Bump this integer any time buildall.sh's setup_prefix()
-# changes, even if no dependency version changed.
-CROSSFILE_REV=4
+# BUILD_LOGIC_REV below exists because the cached prefix/<platform>/
+# directory contains more than just "whatever version of each dependency
+# was requested" — it's the actual compiled OUTPUT of running this
+# project's own build scripts (buildall.sh's generated crossfile.txt,
+# plus every scripts/*.sh's compiled result) against those versions. A
+# change to any of those scripts' build LOGIC — not just a v_whatever
+# version bump — can silently be masked by a stale cache that still
+# holds output from the old, buggy script. Two real examples that
+# required bumping this:
+#   - buildall.sh's setup_prefix() gained objc/objcpp crossfile entries
+#     (mpv's meson.build needs them to compile hwdec_ios_gl.m).
+#   - ffmpeg.sh's -fembed-bitcode flag was removed (Xcode 14+ deprecated
+#     bitcode entirely; Xcode 16 produces a corrupted, unreadable-by-
+#     libtool .a file if this flag is still passed — see docs/RESEARCH.md
+#     for the full incident).
+# Bump this integer any time a change to buildall.sh or any scripts/*.sh
+# file could alter its compiled output, even if no dependency version
+# changed — "did I just change what this script produces" is the
+# question to ask, not "did I just change a version number."
+BUILD_LOGIC_REV=5
 
 cache_id() {
 	local platform=$1
-	echo "ios-deps-${platform}-crossfile${CROSSFILE_REV}-lua${v_lua}-unibreak${v_unibreak}-harfbuzz${v_harfbuzz}-fribidi${v_fribidi}-freetype${v_freetype}-mbedtls${v_mbedtls}-libxml2${v_libxml2}"
+	echo "ios-deps-${platform}-buildrev${BUILD_LOGIC_REV}-lua${v_lua}-unibreak${v_unibreak}-harfbuzz${v_harfbuzz}-fribidi${v_fribidi}-freetype${v_freetype}-mbedtls${v_mbedtls}-libxml2${v_libxml2}"
 }
 
 fetch_prefix() {

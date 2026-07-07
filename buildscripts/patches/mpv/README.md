@@ -4,6 +4,10 @@ This folder contains patches applied automatically to mpv's source before
 building it for iOS (see `buildscripts/include/apply-mpv-patches.sh`,
 called from `download.sh` right after mpv is cloned).
 
+> For the full story of how these patches were discovered — including a
+> mistake made and caught in the process — see
+> [docs/RESEARCH.md](../../docs/RESEARCH.md), entries 8 and 9.
+
 ## Why these exist
 
 A small number of mpv source files call macOS-only APIs from code paths

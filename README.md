@@ -18,6 +18,16 @@ more), plus code style and testing notes. See **[ROADMAP.md](ROADMAP.md)**
 for the bigger picture — where the project stands today and what's planned
 across each upcoming phase.
 
+## Documentation
+
+Beyond this README, see **[docs/](docs/)** for reference material: the
+proposed URL scheme / Universal Links integration spec, the privacy
+policy, the maintainer release checklist, and
+**[docs/RESEARCH.md](docs/RESEARCH.md)** — a chronological log of every
+build/compatibility bug found and fixed while porting mpv to iOS, worth
+checking before troubleshooting a build failure that might already be
+documented there.
+
 ## Project layout
 
 ```

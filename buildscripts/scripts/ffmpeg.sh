@@ -23,7 +23,7 @@ args=(
 	--arch=$ffarch --cc="$CC" --cxx="$CXX" --ar="$AR" --ranlib="$RANLIB"
 	--pkg-config=pkg-config --nm="$(xcrun --sdk $sdk --find nm)"
 
-	--extra-cflags="-I$prefix_dir/include -fembed-bitcode"
+	--extra-cflags="-I$prefix_dir/include"
 	--extra-cxxflags="-I$prefix_dir/include"
 	--extra-ldflags="-L$prefix_dir/lib $LDFLAGS"
 
