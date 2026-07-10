@@ -34,7 +34,7 @@ msg() {
 # file could alter its compiled output, even if no dependency version
 # changed — "did I just change what this script produces" is the
 # question to ask, not "did I just change a version number."
-BUILD_LOGIC_REV=5
+BUILD_LOGIC_REV=6
 
 cache_id() {
 	local platform=$1

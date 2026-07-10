@@ -490,13 +490,13 @@ unreachable-but-still-compiled for a given configuration.
 
 ---
 
-## 13. A three-round investigation: bitcode flag, then a misleading error, then the real bug
+## 13. A four-round investigation: bitcode flag, a misleading error, a real ordering bug, and finally LTO
 
-This entry covers three CI failures that looked like the same issue
-(same error message, same hex value) but turned out to have two
-different root causes discovered across three separate rounds of
-investigation — worth reading as one continuous story, since each round
-corrected something believed settled in the previous one.
+This entry covers four CI failures that looked like the same issue (same
+error message, same hex value) but turned out to have three different
+root causes discovered across four separate rounds of investigation —
+worth reading as one continuous story, since each round corrected
+something believed settled in the previous one.
 
 **Round 1 — what looked like the whole story:** the XCFramework assembly
 step failed with:
@@ -588,6 +588,53 @@ across successive rounds. Worth remembering that grepping a log for
 explanatory line here was a completely unremarkable-looking status
 message in the wrong place, not anything that says "error" at all.
 
+**Round 4 — the same error, a third time, after the ordering bug was
+genuinely fixed:** with `ci.sh` corrected (round 3) and confirmed via log
+to now build each platform exactly once and run XCFramework assembly
+exactly once, afterward — the *exact same* `Unknown header: 0xb17c0de`
+error still occurred. This time, tracing the log confirmed every
+`libtool -static` merge (all three platforms) completed successfully
+with no errors, and the failure happened afterward, specifically inside
+`xcodebuild -create-xcframework` reading back `ios-arm64`'s freshly,
+correctly-merged `libmpv-combined.a`. This ruled out the round-3 ordering
+bug as a contributing factor to this specific failure (it was real and
+worth fixing regardless, but wasn't a cause of this error either) and
+pointed at a genuinely corrupt object file somewhere in the 18 static
+libs being merged for that platform.
+
+Checking every `buildscripts/scripts/*.sh` file again for any remaining
+bitcode-related flag turned up nothing (the `-fembed-bitcode` removal
+from round 1 was confirmed still in place, and no other script ever had
+it). This led to research into what *else* can cause a compiler to embed
+LLVM bitcode/IR into an object file: LTO (Link-Time Optimization). `clang`
+implements LTO by embedding LLVM IR/bitcode into object files as an
+inherent part of the mechanism — not only when the separate
+`-fembed-bitcode` flag is explicitly passed. `dav1d.sh` had
+`-Db_lto=true` in its meson setup, and meson has a long-documented,
+known-broken interaction between `b_lto` and static libraries
+(`mesonbuild/meson#1646`) — exactly the `--default-library=static`
+configuration this project's crossfile forces for every dependency.
+
+**Actual final fix:** removed `-Db_lto=true` from `dav1d.sh`. As with the
+earlier `-fembed-bitcode` removal, `libtool -static` merged the
+LTO-tainted dav1d objects into `libmpv-combined.a` without any complaint
+— the corruption was only ever caught later, by `xcodebuild
+-create-xcframework`'s stricter validation, which is part of why this
+took multiple rounds to fully localize: the tool that actually creates
+the merged archive doesn't validate architecture information the way the
+tool that consumes it afterward does.
+
+**Lesson, extending the same theme from round 2:** "no `-fembed-bitcode`
+anywhere" turned out not to mean "no bitcode/IR anywhere in any object
+file" — LTO is a second, independent path to the same class of problem,
+enabled by a completely different-looking meson option with no obvious
+naming connection to "bitcode" at all. When a symptom is known to be
+caused by a category of thing (embedded LLVM bitcode/IR) rather than one
+specific flag, it's worth searching for every mechanism that produces
+that category, not just the first one found — `grep`-ing for the literal
+string that fixed it last time (`bitcode`) would never have found
+`-Db_lto=true`, since that option's name doesn't mention bitcode at all.
+
 ## 14. Vulkan via MoltenVK: investigated, not yet attempted
 
 Documented in full in `ROADMAP.md`'s Phase 4 — summarized here for
@@ -666,3 +713,16 @@ once at the end rather than repeating per-entry:
    old fixes with the same rigor as new bugs when a symptom that was
    supposedly already resolved shows up again, rather than assuming the
    earlier fix must have been right and looking elsewhere first.
+7. **A symptom caused by a category of thing can have more than one
+   independent source.** Entry 13's four rounds are the clearest example
+   in this whole log: an "embedded LLVM bitcode/IR" symptom was first
+   (correctly) traced to an explicit `-fembed-bitcode` flag, but after
+   removing it the identical symptom persisted — because LTO
+   (`-Db_lto=true`, a meson option with no naming resemblance to
+   "bitcode" at all) produces the same class of embedded-IR object via a
+   completely different, unrelated mechanism. Once a bug is understood at
+   the level of "what category of thing causes this," it's worth
+   searching for every known way to produce that category, not stopping
+   at the first match — grepping a codebase for the literal string that
+   fixed a similar bug before will miss a different flag causing the same
+   underlying problem.
