@@ -93,16 +93,38 @@ jobs:
           name: MPVKit-package
           path: MPVKit
 
+      # IMPORTANT: this job intentionally uses `xcodebuild`, not
+      # `swift build`. Plain `swift build -Xswiftc -sdk ... -Xswiftc -target
+      # ...` cannot build a Swift package that has a .binaryTarget
+      # (our XCFramework-wrapping "Libmpv" target) for iOS or the iOS
+      # Simulator at all - this is a known, documented upstream SwiftPM
+      # limitation (swift-package-manager#6571), not a mistake in how the
+      # flags were passed here. SwiftPM's own binary-target resolution code
+      # (SPMBuildCore/BinaryTarget+Extensions.swift, at the time that issue
+      # was filed) only maps the "macos" platform string to an XCFramework
+      # slice - there is no ios/ios-simulator case in that mapping at all,
+      # so `swift build` looks for a macOS slice in our XCFramework
+      # regardless of the -sdk/-target overrides passed to the Swift
+      # compiler frontend, producing the "using sysroot for 'MacOSX' but
+      # targeting 'iPhone'" warning and a cascading "file not found" error
+      # for every header the misdirected sysroot can't actually locate.
+      # `xcodebuild`, by contrast, has always correctly understood
+      # XCFrameworks across platforms (it's also how mpv-ios-player itself
+      # gets built - see project.yml + appetize-preview.yml), so it's used
+      # here too instead of the SwiftPM CLI. See docs/RESEARCH.md for the
+      # full incident.
       - name: Build MPVKit for iOS Simulator
         run: |
           cd MPVKit
-          swift build \
-            -Xswiftc -sdk -Xswiftc "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
-            -Xswiftc -target -Xswiftc arm64-apple-ios17.0-simulator
+          xcodebuild build \
+            -scheme MPVKit \
+            -destination "generic/platform=iOS Simulator" \
+            CODE_SIGNING_ALLOWED=NO
 
       - name: Build MPVKit for iOS device
         run: |
           cd MPVKit
-          swift build \
-            -Xswiftc -sdk -Xswiftc "$(xcrun --sdk iphoneos --show-sdk-path)" \
-            -Xswiftc -target -Xswiftc arm64-apple-ios17.0
+          xcodebuild build \
+            -scheme MPVKit \
+            -destination "generic/platform=iOS" \
+            CODE_SIGNING_ALLOWED=NO
