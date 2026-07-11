@@ -1,0 +1,43 @@
+/**
+ * Custom Docusaurus theme for mpv-ios documentation.
+ * Color palette echoes the purple/violet tone of the app icon
+ * (derived from mpv-android's own launcher icon).
+ */
+
+:root {
+  --ifm-color-primary: #6b3fa0;
+  --ifm-color-primary-dark: #603990;
+  --ifm-color-primary-darker: #5a3688;
+  --ifm-color-primary-darkest: #4a2c70;
+  --ifm-color-primary-light: #7645b0;
+  --ifm-color-primary-lighter: #7c4bb8;
+  --ifm-color-primary-lightest: #9166c8;
+  --ifm-code-font-size: 92%;
+  --docusaurus-highlighted-code-line-bg: rgba(107, 63, 160, 0.1);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #b892e8;
+  --ifm-color-primary-dark: #a97fe0;
+  --ifm-color-primary-darker: #a175dc;
+  --ifm-color-primary-darkest: #8a5bcb;
+  --ifm-color-primary-light: #c7a5ed;
+  --ifm-color-primary-lighter: #cfb0ef;
+  --ifm-color-primary-lightest: #e2d0f6;
+  --docusaurus-highlighted-code-line-bg: rgba(184, 146, 232, 0.15);
+}
+
+/* Slightly tighter line-length for long-form research log prose */
+article {
+  max-width: 860px;
+}
+
+/* Admonition tweaks for the callout boxes used throughout the docs */
+.theme-admonition {
+  border-radius: 8px;
+}
+
+/* Sidebar category headers used for the Research Log numbering */
+.menu__list-item-collapsible {
+  font-weight: 600;
+}
