@@ -22,6 +22,23 @@ public enum MPVFormat: Int32 {
     case flag   = 3 // MPV_FORMAT_FLAG
     case int64  = 4 // MPV_FORMAT_INT64
     case double = 5 // MPV_FORMAT_DOUBLE
+
+    /// Maps to the real libmpv `mpv_format` C enum, for passing to raw
+    /// C API calls (e.g. mpv_observe_property). Explicit case-by-case
+    /// mapping rather than `mpv_format(rawValue: UInt32(self.rawValue))`
+    /// so this is guaranteed non-optional at compile time — the C enum's
+    /// generated Swift initializer is failable (it can't know every raw
+    /// value maps to a defined case), which would otherwise force an
+    /// unsafe unwrap or an unreachable-but-still-required fallback here.
+    var mpvFormat: mpv_format {
+        switch self {
+        case .none:   return MPV_FORMAT_NONE
+        case .string: return MPV_FORMAT_STRING
+        case .flag:   return MPV_FORMAT_FLAG
+        case .int64:  return MPV_FORMAT_INT64
+        case .double: return MPV_FORMAT_DOUBLE
+        }
+    }
 }
 
 /// Events dispatched by MPVCore, mirroring the `event(int)` and
@@ -139,7 +156,7 @@ public final class MPVCore {
     /// Runs an mpv command synchronously, e.g. core.command(["loadfile", url]).
     @discardableResult
     public func command(_ args: [String]) -> Int32 {
-        guard let h = handle else { return MPV_ERROR_UNINITIALIZED }
+        guard let h = handle else { return MPV_ERROR_UNINITIALIZED.rawValue }
 
         var cArgs: [UnsafeMutablePointer<CChar>?] = args.map { strdup($0) }
         cArgs.append(nil)
@@ -157,7 +174,7 @@ public final class MPVCore {
     /// jni command() call is fine there since it's invoked off the JNI/UI
     /// thread already in practice; here we expose both for flexibility).
     public func commandAsync(_ args: [String], replyUserdata: UInt64 = 0) -> Int32 {
-        guard let h = handle else { return MPV_ERROR_UNINITIALIZED }
+        guard let h = handle else { return MPV_ERROR_UNINITIALIZED.rawValue }
 
         var cArgs: [UnsafeMutablePointer<CChar>?] = args.map { strdup($0) }
         cArgs.append(nil)
@@ -175,7 +192,7 @@ public final class MPVCore {
     /// Equivalent to MPVLib.setOptionString(String, String).
     @discardableResult
     public func setOptionString(_ option: String, _ value: String) -> Int32 {
-        guard let h = handle else { return MPV_ERROR_UNINITIALIZED }
+        guard let h = handle else { return MPV_ERROR_UNINITIALIZED.rawValue }
         return mpv_set_option_string(h, option, value)
     }
 
@@ -232,11 +249,11 @@ public final class MPVCore {
         switch event.event_id {
         case MPV_EVENT_PROPERTY_CHANGE, MPV_EVENT_GET_PROPERTY_REPLY:
             guard let dataPtr = event.data else {
-                return .other(eventId: event.event_id.rawValue)
+                return .other(eventId: Int32(event.event_id.rawValue))
             }
             let prop = dataPtr.assumingMemoryBound(to: mpv_event_property.self).pointee
             let name = String(cString: prop.name)
-            let format = MPVFormat(rawValue: prop.format.rawValue) ?? .none
+            let format = MPVFormat(rawValue: Int32(prop.format.rawValue)) ?? .none
 
             let data: MPVPropertyData
             switch prop.format {
@@ -259,7 +276,7 @@ public final class MPVCore {
 
         case MPV_EVENT_LOG_MESSAGE:
             guard let dataPtr = event.data else {
-                return .other(eventId: event.event_id.rawValue)
+                return .other(eventId: Int32(event.event_id.rawValue))
             }
             let msg = dataPtr.assumingMemoryBound(to: mpv_event_log_message.self).pointee
             // Same invalid-UTF-8 defensive filtering as event.cpp's
@@ -284,9 +301,9 @@ public final class MPVCore {
                 return .endFile(reason: -1)
             }
             let endFile = dataPtr.assumingMemoryBound(to: mpv_event_end_file.self).pointee
-            return .endFile(reason: endFile.reason.rawValue)
+            return .endFile(reason: Int32(endFile.reason.rawValue))
         default:
-            return .other(eventId: event.event_id.rawValue)
+            return .other(eventId: Int32(event.event_id.rawValue))
         }
     }
 }

@@ -57,7 +57,7 @@ public extension MPVCore {
     /// Equivalent to MPVLib.setPropertyInt(String, Int).
     @discardableResult
     func setPropertyInt(_ property: String, _ value: Int64) -> Int32 {
-        guard let h = handle else { return MPV_ERROR_UNINITIALIZED }
+        guard let h = handle else { return MPV_ERROR_UNINITIALIZED.rawValue }
         var v = value
         return mpv_set_property(h, property, MPV_FORMAT_INT64, &v)
     }
@@ -65,7 +65,7 @@ public extension MPVCore {
     /// Equivalent to MPVLib.setPropertyDouble(String, Double).
     @discardableResult
     func setPropertyDouble(_ property: String, _ value: Double) -> Int32 {
-        guard let h = handle else { return MPV_ERROR_UNINITIALIZED }
+        guard let h = handle else { return MPV_ERROR_UNINITIALIZED.rawValue }
         var v = value
         return mpv_set_property(h, property, MPV_FORMAT_DOUBLE, &v)
     }
@@ -73,7 +73,7 @@ public extension MPVCore {
     /// Equivalent to MPVLib.setPropertyBoolean(String, Boolean).
     @discardableResult
     func setPropertyBool(_ property: String, _ value: Bool) -> Int32 {
-        guard let h = handle else { return MPV_ERROR_UNINITIALIZED }
+        guard let h = handle else { return MPV_ERROR_UNINITIALIZED.rawValue }
         var v: Int32 = value ? 1 : 0
         return mpv_set_property(h, property, MPV_FORMAT_FLAG, &v)
     }
@@ -81,7 +81,7 @@ public extension MPVCore {
     /// Equivalent to MPVLib.setPropertyString(String, String).
     @discardableResult
     func setPropertyString(_ property: String, _ value: String) -> Int32 {
-        guard let h = handle else { return MPV_ERROR_UNINITIALIZED }
+        guard let h = handle else { return MPV_ERROR_UNINITIALIZED.rawValue }
         return value.withCString { cValue -> Int32 in
             var mutableCopy: UnsafePointer<CChar>? = cValue
             return withUnsafeMutablePointer(to: &mutableCopy) { ptr -> Int32 in
@@ -101,8 +101,8 @@ public extension MPVCore {
     /// eventProperty(...) callbacks on MPVLib.
     @discardableResult
     func observeProperty(_ property: String, format: MPVFormat) -> Int32 {
-        guard let h = handle else { return MPV_ERROR_UNINITIALIZED }
-        return mpv_observe_property(h, 0, property, mpv_format(rawValue: format.rawValue))
+        guard let h = handle else { return MPV_ERROR_UNINITIALIZED.rawValue }
+        return mpv_observe_property(h, 0, property, format.mpvFormat)
     }
 
     /// Equivalent to MPVLib.unobserveProperty — stops delivering change
@@ -110,7 +110,7 @@ public extension MPVCore {
     /// observeProperty's default above).
     @discardableResult
     func unobserveProperty() -> Int32 {
-        guard let h = handle else { return MPV_ERROR_UNINITIALIZED }
+        guard let h = handle else { return MPV_ERROR_UNINITIALIZED.rawValue }
         return mpv_unobserve_property(h, 0)
     }
 }

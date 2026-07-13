@@ -124,7 +124,7 @@ bureaucracy for its own sake — it exists because:
      since many common questions are already answered there.
 3. **Wait for a signal before starting large work.** For small, obvious
    fixes (a typo, a broken link, an off-by-one in a comment) feel free to
-   just open the PR and reference "Closes #<issue-number>" in it. For
+   just open the PR and reference `Closes #<issue-number>` in it. For
    anything larger — a new feature, a refactor, a new workflow — wait for
    at least a brief acknowledgment on the issue first. This is the single
    biggest thing that prevents wasted effort on both sides.
