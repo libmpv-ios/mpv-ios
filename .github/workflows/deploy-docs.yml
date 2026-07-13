@@ -35,9 +35,25 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 20
+          # NOTE: npm dependency caching (cache: npm) is intentionally
+          # NOT enabled here. actions/setup-node's cache feature requires
+          # a package-lock.json to key the cache against, and this
+          # project does not commit one yet (see documentation-site's own
+          # README for why, and how to generate one). Pointing
+          # cache-dependency-path at a lockfile that doesn't exist
+          # produces "Some specified paths were not resolved, unable to
+          # cache dependencies" - a harmless warning on its own, but it's
+          # a sign the real fix (committing an actual package-lock.json)
+          # hasn't been done yet, not something to silence by pointing
+          # this at a different file. Once a real package-lock.json is
+          # committed, add `cache: npm` back here and switch `npm install`
+          # below back to `npm ci` (faster, and enforces the lockfile
+          # matches package.json exactly - npm ci refuses to run at all
+          # without a lockfile present, which is why it isn't used yet
+          # either).
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build site
         run: npm run build
