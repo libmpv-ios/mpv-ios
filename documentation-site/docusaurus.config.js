@@ -32,7 +32,7 @@ const config = {
   baseUrl: '/mpv-ios/',
 
   // GitHub pages deployment config.
-  organizationName: 'YOUR-GITHUB-USERNAME', // Usually your GitHub org/user name.
+  organizationName: 'libmpv-ios', // Usually your GitHub org/user name.
   projectName: 'mpv-ios', // Usually your repo name.
   deploymentBranch: 'gh-pages',
   trailingSlash: false,
@@ -55,7 +55,7 @@ const config = {
         docs: {
           sidebarPath: './sidebars.js',
           editUrl:
-            'https://github.com/YOUR-GITHUB-USERNAME/mpv-ios/edit/main/documentation-site/',
+            'https://github.com/libmpv-ios/mpv-ios/edit/main/documentation-site/',
         },
         blog: false, // no blog section needed for this project
         theme: {
@@ -85,7 +85,7 @@ const config = {
             label: 'Documentation',
           },
           {
-            href: 'https://github.com/YOUR-GITHUB-USERNAME/mpv-ios',
+            href: 'https://github.com/libmpv-ios/mpv-ios',
             label: 'GitHub',
             position: 'right',
           },
@@ -111,7 +111,7 @@ const config = {
               },
               {
                 label: 'GitHub Issues',
-                href: 'https://github.com/YOUR-GITHUB-USERNAME/mpv-ios/issues',
+                href: 'https://github.com/libmpv-ios/mpv-ios/issues',
               },
             ],
           },
@@ -120,7 +120,7 @@ const config = {
             items: [
               {
                 label: 'GitHub Repository',
-                href: 'https://github.com/YOUR-GITHUB-USERNAME/mpv-ios',
+                href: 'https://github.com/libmpv-ios/mpv-ios',
               },
               {
                 label: 'mpv-android (sibling project)',
