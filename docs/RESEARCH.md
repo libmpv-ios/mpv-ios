@@ -904,10 +904,10 @@ occurrence.
 
 ---
 
-## 19. `DispatchQueue.sync` became ambiguous next to nested generic `rethrows` closures
+## 19. `DispatchQueue.sync` ambiguity: an annotation wasn't enough, extraction was
 
-**What happened:** with entries 15–18 resolved, `MPVKit` progressed
-further into real type-checking and hit:
+**What happened, round 1:** with entries 15–18 resolved, `MPVKit`
+progressed further into real type-checking and hit:
 ```
 MPVGLView.swift:97:21: error: ambiguous use of 'sync(execute:)'
         renderQueue.sync {
@@ -918,37 +918,47 @@ Dispatch.DispatchQueue:3:17: note: found this candidate in module 'Dispatch'
     public func sync(execute block: () -> Void)
 ```
 
-**Root cause:** `DispatchQueue` (from the `Dispatch` module) declares two
-overloads of `sync`: a generic, `rethrows` version that can return any
-value and propagate a thrown error, and a plain, non-generic version that
-takes a `() -> Void` closure and returns nothing. Normally Swift's
-type-checker picks the right one automatically based on what the trailing
-closure actually does. In `attachRenderContext()`, the closure passed to
-`renderQueue.sync { ... }` contained **nested calls to
-`withUnsafeMutablePointer(to:_:)`**, which is itself generic and
-`rethrows`. With that nested generic/rethrows structure inside, the
-type-checker could no longer confidently infer the outer closure's own
-return type and throwing-ness, making both `sync` overloads look equally
-valid — hence "ambiguous."
+**Initial (incomplete) diagnosis:** `DispatchQueue` declares two
+overloads of `sync` — a generic, `rethrows` version, and a plain
+`() -> Void` version. The closure passed to `renderQueue.sync { ... }` in
+`attachRenderContext()` contained **nested calls to
+`withUnsafeMutablePointer(to:_:)`**, itself generic and `rethrows`. The
+first fix attempt added an explicit closure signature —
+`renderQueue.sync { () -> Void in ... }` — reasoning that telling the
+compiler the outer closure's type explicitly would resolve which `sync`
+overload was intended.
 
-**Fix:** added an explicit closure signature, `renderQueue.sync { () ->
-Void in ... }`, at both `.sync { ... }` call sites in `MPVGLView.swift`
-(the one that actually contained nested generic calls, and one other
-that didn't but uses the same `DispatchQueue.sync` pattern, fixed
-defensively rather than relying on the compiler continuing to infer it
-correctly there). This explicitly tells the compiler which overload is
-intended, without changing any runtime behavior — the closures were
-already effectively `() -> Void`, non-throwing; the annotation just makes
-that visible to the type-checker instead of leaving it to infer from
-increasingly complex nested closure bodies.
+**Round 2 — the same error, in the same place, after that fix shipped:**
+a later CI run showed the identical "ambiguous use of 'sync(execute:)'"
+error, at the same line, **with the `() -> Void in` annotation visibly
+already present** in the failing line the compiler quoted. This
+conclusively demonstrated that the annotation alone was not sufficient —
+the ambiguity wasn't coming from Swift being unable to infer the outer
+closure's own signature, but from the *nested* generic/rethrows calls
+inside it confusing overload resolution in a way an outer annotation
+doesn't reach.
 
-**Lesson:** an "ambiguous use of X" error doesn't always mean the call
-site itself is unclear to a human reader — it can mean nested generic or
-`rethrows` closures elsewhere in the same closure body are defeating the
-compiler's own type/throws inference for the outer closure. When this
-happens, making the outer closure's signature explicit is usually simpler
-and more robust than trying to restructure the nested calls to make
-inference easier.
+**Actual fix:** extracted the entire nested
+`withUnsafeMutablePointer(to:_:)` pyramid out of the `sync` closure
+entirely, into a new private, non-generic method
+(`createRenderContext(core:) -> MPVError?`). The `sync` closure in
+`attachRenderContext()` now contains only a single, flat statement —
+`creationError = self.createRenderContext(core: core)` — with no nested
+generic calls anywhere in its body. This is what actually resolved the
+ambiguity: removing the nested generics from the closure passed to
+`sync`, not describing that closure's own type more precisely.
+
+**Lesson:** when an "ambiguous use of X" error persists after adding an
+explicit type annotation at the call site the error points to, the
+annotation may be treating a symptom rather than the cause — worth
+checking whether *nested* generic/`rethrows` calls deeper inside that
+same closure body are what's actually defeating overload resolution.
+Extracting the nested generic structure into its own ordinary
+(non-generic-call-containing) function is a more reliable fix than
+trying to out-annotate the ambiguity from the outside, and is worth
+trying first once an annotation demonstrably didn't work — as confirmed
+here by the same error reappearing, unchanged, in the very next CI run
+after the annotation was believed to have fixed it.
 
 ---
 
@@ -1015,3 +1025,15 @@ once at the end rather than repeating per-entry:
    at the first match — grepping a codebase for the literal string that
    fixed a similar bug before will miss a different flag causing the same
    underlying problem.
+8. **A fix that looks plausible and matches the error message isn't
+   confirmed until the next CI run actually passes.** Entry 19 shipped an
+   explicit closure-type annotation as a fix for an "ambiguous use of
+   sync(execute:)" error, reasoning correctly about *what* Dispatch's two
+   overloads were but incompletely about *why* the ambiguity existed —
+   and the exact same error reappeared, completely unchanged, in the very
+   next CI run, with the "fix" plainly visible in the quoted failing
+   line. The real fix (extracting nested generic calls out of the
+   closure entirely) only became apparent after that second failure ruled
+   out the first theory. Worth treating a fix as a hypothesis until CI
+   confirms it, not a foregone conclusion just because it addresses a
+   plausible-sounding mechanism.

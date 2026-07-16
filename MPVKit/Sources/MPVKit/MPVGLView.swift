@@ -96,54 +96,73 @@ public final class MPVGLView: UIView {
 
         renderQueue.sync { () -> Void in
             EAGLContext.setCurrent(eaglContext)
-
-            var initParams = mpv_opengl_init_params(
-                get_proc_address: { ctx, name in
-                    cmpv_gles_get_proc_address(ctx, name)
-                },
-                get_proc_address_ctx: nil
-            )
-
-            let apiTypeGL = UnsafeMutablePointer(mutating: MPV_RENDER_API_TYPE_OPENGL)
-
-            withUnsafeMutablePointer(to: &Self.advancedControlOn) { advancedControlPtr in
-                withUnsafeMutablePointer(to: &initParams) { initParamsPtr in
-                    var params: [mpv_render_param] = [
-                        mpv_render_param(type: MPV_RENDER_PARAM_API_TYPE, data: UnsafeMutableRawPointer(mutating: apiTypeGL)),
-                        mpv_render_param(type: MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, data: UnsafeMutableRawPointer(initParamsPtr)),
-                        mpv_render_param(type: MPV_RENDER_PARAM_ADVANCED_CONTROL, data: UnsafeMutableRawPointer(advancedControlPtr)),
-                        mpv_render_param(type: MPV_RENDER_PARAM_INVALID, data: nil)
-                    ]
-
-                    var ctx: OpaquePointer?
-                    let result = mpv_render_context_create(&ctx, core.handle, &params)
-                    guard result >= 0, let ctx else {
-                        creationError = MPVError(result)
-                        return
-                    }
-                    self.renderContext = ctx
-
-                    // Route mpv's "new frame ready" notifications to our
-                    // render queue. The C-trampoline indirection here is
-                    // required because Swift closures that capture context
-                    // cannot be passed where the C API expects a bare
-                    // function pointer (see cmpv_shim.h).
-                    let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-                    cmpv_register_render_update_fn({ ctxPtr in
-                        guard let ctxPtr else { return }
-                        let view = Unmanaged<MPVGLView>.fromOpaque(ctxPtr).takeUnretainedValue()
-                        view.renderQueue.async { [weak view] in
-                            view?.needsRedraw = true
-                            view?.drawIfNeeded()
-                        }
-                    }, selfPtr)
-                    cmpv_set_render_update_callback(ctx, selfPtr)
-                }
-            }
+            creationError = self.createRenderContext(core: core)
         }
 
         if let creationError {
             throw creationError
+        }
+    }
+
+    /// Does the actual mpv_render_context_create() call and wires up the
+    /// update callback. Pulled out of attachRenderContext()'s `sync`
+    /// closure into its own non-generic method specifically to resolve a
+    /// real "ambiguous use of 'sync(execute:)'" compile error: nesting
+    /// generic, `rethrows` calls (`withUnsafeMutablePointer(to:_:)`)
+    /// directly inside the `renderQueue.sync { ... }` trailing closure
+    /// defeated Swift's ability to confidently resolve which of
+    /// DispatchQueue's two `sync` overloads (the generic/throwing one vs.
+    /// the plain `() -> Void` one) was intended — even with an explicit
+    /// `() -> Void in` annotation on the outer closure itself. Moving the
+    /// nested-generic-call pyramid into its own ordinary method removes
+    /// the nested generics from the `sync` closure's body entirely, which
+    /// is what actually resolves the ambiguity (the annotation alone did
+    /// not). See docs/RESEARCH.md for the full incident, including the
+    /// first, insufficient attempt at fixing this.
+    private func createRenderContext(core: MPVCore) -> MPVError? {
+        var initParams = mpv_opengl_init_params(
+            get_proc_address: { ctx, name in
+                cmpv_gles_get_proc_address(ctx, name)
+            },
+            get_proc_address_ctx: nil
+        )
+
+        let apiTypeGL = UnsafeMutablePointer(mutating: MPV_RENDER_API_TYPE_OPENGL)
+
+        return withUnsafeMutablePointer(to: &Self.advancedControlOn) { advancedControlPtr -> MPVError? in
+            withUnsafeMutablePointer(to: &initParams) { initParamsPtr -> MPVError? in
+                var params: [mpv_render_param] = [
+                    mpv_render_param(type: MPV_RENDER_PARAM_API_TYPE, data: UnsafeMutableRawPointer(mutating: apiTypeGL)),
+                    mpv_render_param(type: MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, data: UnsafeMutableRawPointer(initParamsPtr)),
+                    mpv_render_param(type: MPV_RENDER_PARAM_ADVANCED_CONTROL, data: UnsafeMutableRawPointer(advancedControlPtr)),
+                    mpv_render_param(type: MPV_RENDER_PARAM_INVALID, data: nil)
+                ]
+
+                var ctx: OpaquePointer?
+                let result = mpv_render_context_create(&ctx, core.handle, &params)
+                guard result >= 0, let ctx else {
+                    return MPVError(result)
+                }
+                self.renderContext = ctx
+
+                // Route mpv's "new frame ready" notifications to our
+                // render queue. The C-trampoline indirection here is
+                // required because Swift closures that capture context
+                // cannot be passed where the C API expects a bare
+                // function pointer (see cmpv_shim.h).
+                let selfPtr = Unmanaged.passUnretained(self).toOpaque()
+                cmpv_register_render_update_fn({ ctxPtr in
+                    guard let ctxPtr else { return }
+                    let view = Unmanaged<MPVGLView>.fromOpaque(ctxPtr).takeUnretainedValue()
+                    view.renderQueue.async { [weak view] in
+                        view?.needsRedraw = true
+                        view?.drawIfNeeded()
+                    }
+                }, selfPtr)
+                cmpv_set_render_update_callback(ctx, selfPtr)
+
+                return nil
+            }
         }
     }
 
