@@ -22,6 +22,8 @@ behind it, rather than repeating that investigation here.
 
 ## [Unreleased]
 
+## [v0.1.0] - 2026-08-09
+
 ### Added
 
 - OpenGL ES / EAGL rendering path in `MPVGLView.swift`, with VideoToolbox
