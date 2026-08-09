@@ -11,30 +11,45 @@ prebuilt native library, published so contributors and forks don't have
 to cross-compile libmpv themselves (see `appetize-preview.yml`'s reliance
 on this).
 
+**Release notes are written *before* you tag, not after.** As work lands
+(in the same PR as the change, ideally), add a bullet under
+[CHANGELOG.md](../CHANGELOG.md)'s `[Unreleased]` section describing its
+user- or contributor-facing effect. By the time you're ready to cut a
+release, the notes already exist — cutting the release just publishes
+them. See CHANGELOG.md's own header for the exact format.
+
 1. Decide whether this is a routine dependency-bump release (from a merged
    `dependency-check.yml` PR) or a manual release.
 2. On `main`/`master`, confirm `build.yml` is currently green. Don't cut a
    release from a red build.
-3. Tag: `git tag vX.Y.Z && git push origin vX.Y.Z` (semantic versioning;
+3. Confirm `CHANGELOG.md`'s `[Unreleased]` section actually has entries —
+   if a change landed without a changelog bullet, add it now, before
+   tagging. (`release.yml` will refuse to publish an empty release, so
+   this is also a hard CI check, not just a reminder.)
+4. Tag: `git tag vX.Y.Z && git push origin vX.Y.Z` (semantic versioning;
    see "Versioning" below for what bumps which number).
-4. `release.yml` runs automatically on the tag push. Watch it in the
-   Actions tab.
-5. Once green, check the Releases page for the new release: it should
-   have `Libmpv.xcframework.zip`, `MPVKit-vX.Y.Z.zip`, and `checksum.txt`
-   attached.
-6. Write release notes. At minimum, include the exact version/commit
-   pinned for each dependency at release time — pull these directly from
-   `buildscripts/include/depinfo.sh` (`v_lua`, `v_freetype`, `v_harfbuzz`,
-   `v_fribidi`, `v_mbedtls`, `v_libxml2`, `v_unibreak`, and the five
-   `v_ci_*` git-ref pins for mpv/ffmpeg/dav1d/libass/libplacebo). This
-   matches the level of detail mpv-android publishes in its own release
-   notes, and is genuinely useful for anyone debugging a build issue later
-   ("was this broken in v1.2.0, or did it start with the libass bump in
-   v1.3.0?").
+5. `release.yml` runs automatically on the tag push. Watch it in the
+   Actions tab. It will:
+   - build `Libmpv.xcframework` and package the release assets as before;
+   - generate the release body from `CHANGELOG.md`'s `[Unreleased]`
+     section plus a table of every pinned dependency version (pulled live
+     from `buildscripts/include/depinfo.sh`), via
+     `buildscripts/include/cut-release.sh notes` — see that script for
+     exactly what it extracts;
+   - publish the GitHub Release with that generated body;
+   - move `[Unreleased]`'s content in `CHANGELOG.md` under a new
+     `## [vX.Y.Z] - YYYY-MM-DD` heading (via `cut-release.sh bump`) and
+     commit that back to the default branch, so `CHANGELOG.md` in the repo
+     always matches what was actually published and the next PR starts
+     from a clean `[Unreleased]`.
+6. Once green, check the Releases page: it should have
+   `Libmpv.xcframework.zip`, `MPVKit-vX.Y.Z.zip`, `checksum.txt`, and a
+   populated body — no manual note-writing step needed at this point.
 7. If anything in "Architecture notes" (main README) changed as part of
-   this release — a render backend swap, a new hwdec path, etc. — call
-   that out explicitly in the release notes, the way this project's own
-   README already documents the Metal-backend correction.
+   this release — a render backend swap, a new hwdec path, etc. — that
+   should already be reflected as a `CHANGELOG.md` entry from step 3,
+   the way this project's own README already documents the Metal-backend
+   correction.
 
 ## App release (signed .ipa / TestFlight / App Store)
 

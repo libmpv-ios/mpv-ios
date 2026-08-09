@@ -31,7 +31,7 @@ jobs:
           brew install meson ninja pkg-config gnu-sed nasm autoconf automake libtool coreutils
 
       - name: Export cache key
-        run: buildscripts/include/ci.sh export >>"$GITHUB_ENV"
+        run: ./include/ci.sh export >>"$GITHUB_ENV"
         working-directory: buildscripts
 
       - uses: actions/cache@v5
@@ -61,6 +61,22 @@ jobs:
           else
             echo "tag=${GITHUB_REF#refs/tags/}" >>"$GITHUB_OUTPUT"
           fi
+
+      # Fails the whole job early (before the release is created or assets
+      # uploaded) if CHANGELOG.md's [Unreleased] section is empty — an
+      # empty release is almost always a forgotten changelog entry, not
+      # something to publish. See buildscripts/include/cut-release.sh for
+      # what "notes" actually extracts.
+      - name: Generate release notes from CHANGELOG.md
+        id: notes
+        run: |
+          chmod +x buildscripts/include/cut-release.sh
+          notes="$(./buildscripts/include/cut-release.sh notes '${{ steps.tag.outputs.tag }}')"
+          {
+            echo "body<<RELEASE_NOTES_EOF"
+            echo "$notes"
+            echo "RELEASE_NOTES_EOF"
+          } >>"$GITHUB_OUTPUT"
 
       - name: Package release assets
         run: |
@@ -98,9 +114,32 @@ jobs:
             - `MPVKit-${{ steps.tag.outputs.tag }}.zip` — full Swift Package (framework included)
             - `checksum.txt` — SHA-256 checksum for `binaryTarget(url:checksum:)` in a remote Package.swift
 
-            See the main README in this repository for integration steps.
+            ${{ steps.notes.outputs.body }}
           files: |
             Libmpv.xcframework.zip
             MPVKit-${{ steps.tag.outputs.tag }}.zip
             checksum.txt
-          generate_release_notes: true
+
+      # Moves CHANGELOG.md's [Unreleased] content under this release's
+      # version heading and leaves [Unreleased] empty again, then commits
+      # that directly to the branch this tag points at — so the very next
+      # PR that touches CHANGELOG.md starts from a clean [Unreleased], and
+      # the published version heading in CHANGELOG.md always matches what
+      # actually shipped in the release. Runs after the release is
+      # published (not before) so a failure here never blocks the release
+      # itself — worst case, this step needs a manual re-run or a
+      # follow-up commit.
+      - name: Update CHANGELOG.md for this release
+        run: |
+          ./buildscripts/include/cut-release.sh bump '${{ steps.tag.outputs.tag }}'
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "docs: move CHANGELOG.md [Unreleased] into ${{ steps.tag.outputs.tag }}"
+          # actions/checkout leaves HEAD detached at the tag's commit (not
+          # on a branch), so `git rev-parse --abbrev-ref HEAD` would just
+          # print "HEAD" here — push explicitly to the default branch
+          # instead. default_branch comes from the repo context, not
+          # hardcoded, so this still works if the repo's default is
+          # renamed later.
+          git push origin "HEAD:${{ github.event.repository.default_branch }}"

@@ -126,7 +126,13 @@ bureaucracy for its own sake — it exists because:
 4. **Reference the issue in your PR.** Use a closing keyword
    (`Closes #123`, `Fixes #123`) in the PR description so it links
    automatically and closes the issue when merged.
-5. **Follow the code style and testing notes below** before requesting
+5. **Add a [CHANGELOG.md](CHANGELOG.md) entry under `[Unreleased]`** if
+   your PR has any user- or contributor-facing effect (most do — a build
+   script fix counts). One sentence, under `Added`/`Changed`/`Fixed`/
+   `Removed`/`Security` as appropriate. This is what a maintainer publishes
+   as release notes later — see `docs/release_process.md` — so it needs to
+   exist by merge time, not get reconstructed afterward.
+6. **Follow the code style and testing notes below** before requesting
    review.
 
 ## Where help is genuinely needed right now
