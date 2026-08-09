@@ -1,6 +1,6 @@
 # mpv for IOS
 
-[![Build Status](https://github.com/AeonCoreX-Lab/mpv-ios/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/AeonCoreX-Lab/mpv-ios/actions/workflows/build.yml)
+[![Build Status](https://github.com/libmpv-ios/mpv-ios/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/AeonCoreX-Lab/mpv-ios/actions/workflows/build.yml)
 
 mpv-ios is a video player for IOS based on [libmpv](https://github.com/mpv-player/mpv).
 
