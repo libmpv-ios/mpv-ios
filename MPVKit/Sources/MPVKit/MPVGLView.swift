@@ -128,50 +128,56 @@ public final class MPVGLView: UIView {
         )
 
         // MPV_RENDER_API_TYPE_OPENGL is a C string macro (`#define ... "opengl"`)
-        // imported from libmpv's render.h. Under the stricter Swift/C
-        // interop rules shipped with the Xcode 16.2 / iOS 18.2 SDK, this
-        // kind of macro can be imported as more than one type (e.g.
-        // `UnsafePointer<CChar>` and `String`), so calling
-        // `UnsafeMutablePointer(mutating:)` directly on it is ambiguous —
-        // the compiler can no longer infer which overload to pick. Binding
-        // it to an explicitly-typed `UnsafePointer<CChar>` constant first
-        // pins the type and resolves the ambiguity.
-        let apiTypeGLCString: UnsafePointer<CChar> = MPV_RENDER_API_TYPE_OPENGL
-        let apiTypeGL = UnsafeMutablePointer(mutating: apiTypeGLCString)
+        // imported from libmpv's render.h. Under the Swift/C interop rules
+        // in the Xcode 16.2 / iOS 18.2 SDK used by this project's CI, this
+        // macro imports as a plain Swift `String`, not as
+        // `UnsafePointer<CChar>` (confirmed directly from the compiler's
+        // own error: "cannot convert value of type 'String' to specified
+        // type 'UnsafePointer<CChar>'" - an earlier fix attempt assumed a
+        // Swift-overload ambiguity between the two types instead, which
+        // was not the actual issue and did not compile). Bridging a
+        // `String` to a C string pointer requires `withCString`, whose
+        // pointer is only guaranteed valid for the duration of its
+        // closure - so the entire mpv_render_context_create call (which
+        // is synchronous and doesn't retain the pointer past the call)
+        // happens inside that closure's scope, rather than trying to
+        // extract a longer-lived pointer via strdup or similar, which
+        // would need matching manual cleanup for no actual benefit here.
+        return MPV_RENDER_API_TYPE_OPENGL.withCString { apiTypeGL -> MPVError? in
+            withUnsafeMutablePointer(to: &Self.advancedControlOn) { advancedControlPtr -> MPVError? in
+                withUnsafeMutablePointer(to: &initParams) { initParamsPtr -> MPVError? in
+                    var params: [mpv_render_param] = [
+                        mpv_render_param(type: MPV_RENDER_PARAM_API_TYPE, data: UnsafeMutableRawPointer(mutating: apiTypeGL)),
+                        mpv_render_param(type: MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, data: UnsafeMutableRawPointer(initParamsPtr)),
+                        mpv_render_param(type: MPV_RENDER_PARAM_ADVANCED_CONTROL, data: UnsafeMutableRawPointer(advancedControlPtr)),
+                        mpv_render_param(type: MPV_RENDER_PARAM_INVALID, data: nil)
+                    ]
 
-        return withUnsafeMutablePointer(to: &Self.advancedControlOn) { advancedControlPtr -> MPVError? in
-            withUnsafeMutablePointer(to: &initParams) { initParamsPtr -> MPVError? in
-                var params: [mpv_render_param] = [
-                    mpv_render_param(type: MPV_RENDER_PARAM_API_TYPE, data: UnsafeMutableRawPointer(mutating: apiTypeGL)),
-                    mpv_render_param(type: MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, data: UnsafeMutableRawPointer(initParamsPtr)),
-                    mpv_render_param(type: MPV_RENDER_PARAM_ADVANCED_CONTROL, data: UnsafeMutableRawPointer(advancedControlPtr)),
-                    mpv_render_param(type: MPV_RENDER_PARAM_INVALID, data: nil)
-                ]
-
-                var ctx: OpaquePointer?
-                let result = mpv_render_context_create(&ctx, core.handle, &params)
-                guard result >= 0, let ctx else {
-                    return MPVError(result)
-                }
-                self.renderContext = ctx
-
-                // Route mpv's "new frame ready" notifications to our
-                // render queue. The C-trampoline indirection here is
-                // required because Swift closures that capture context
-                // cannot be passed where the C API expects a bare
-                // function pointer (see cmpv_shim.h).
-                let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-                cmpv_register_render_update_fn({ ctxPtr in
-                    guard let ctxPtr else { return }
-                    let view = Unmanaged<MPVGLView>.fromOpaque(ctxPtr).takeUnretainedValue()
-                    view.renderQueue.async { [weak view] in
-                        view?.needsRedraw = true
-                        view?.drawIfNeeded()
+                    var ctx: OpaquePointer?
+                    let result = mpv_render_context_create(&ctx, core.handle, &params)
+                    guard result >= 0, let ctx else {
+                        return MPVError(result)
                     }
-                }, selfPtr)
-                cmpv_set_render_update_callback(ctx, selfPtr)
+                    self.renderContext = ctx
 
-                return nil
+                    // Route mpv's "new frame ready" notifications to our
+                    // render queue. The C-trampoline indirection here is
+                    // required because Swift closures that capture context
+                    // cannot be passed where the C API expects a bare
+                    // function pointer (see cmpv_shim.h).
+                    let selfPtr = Unmanaged.passUnretained(self).toOpaque()
+                    cmpv_register_render_update_fn({ ctxPtr in
+                        guard let ctxPtr else { return }
+                        let view = Unmanaged<MPVGLView>.fromOpaque(ctxPtr).takeUnretainedValue()
+                        view.renderQueue.async { [weak view] in
+                            view?.needsRedraw = true
+                            view?.drawIfNeeded()
+                        }
+                    }, selfPtr)
+                    cmpv_set_render_update_callback(ctx, selfPtr)
+
+                    return nil
+                }
             }
         }
     }
