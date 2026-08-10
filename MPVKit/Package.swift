@@ -99,7 +99,6 @@ let package = Package(
                 .linkedFramework("AVFoundation"),
                 .linkedFramework("AudioToolbox"),
                 .linkedFramework("CoreAudio"),
-                .linkedFramework("CoreAudioTypes"),
                 .linkedFramework("VideoToolbox"),
                 .linkedFramework("CoreMedia"),
             ]
