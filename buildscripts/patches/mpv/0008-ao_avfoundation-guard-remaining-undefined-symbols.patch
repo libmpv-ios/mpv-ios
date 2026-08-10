@@ -1,0 +1,26 @@
+--- a/audio/out/ao_avfoundation.m
++++ b/audio/out/ao_avfoundation.m
+@@ -206,10 +206,14 @@
+     return self;
+ }
+ - (void)handleRestartNotification:(NSNotification*)notification {
++#if HAVE_COCOA
+     char *name = cfstr_get_cstr((CFStringRef)notification.name);
++#endif
+     MP_WARN(ao, "restarting due to system notification; this will cause desync\n");
++#if HAVE_COCOA
+     MP_VERBOSE(ao, "notification name: %s\n", name);
+     talloc_free(name);
++#endif
+     stop(ao);
+     start(ao);
+ }
+@@ -362,6 +366,8 @@
+     .reset          = stop,
+     .start          = start,
+     .set_pause      = set_pause,
++#if HAVE_COREAUDIO
+     .list_devs      = ca_get_device_list,
++#endif
+     .priv_size      = sizeof(struct priv),
+ };

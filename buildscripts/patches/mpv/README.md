@@ -105,6 +105,45 @@ Note: unlike 0001-0006, this patch depends on 0002 already being applied
 under avfoundation-only builds) — hence its number placing it after 0006
 in application order.
 
+### 0008 — `ao_avfoundation.m`: guard the two remaining unguarded references
+
+Found in CI, after 0001-0007: the first real app-level link (not just
+compiling `MPVKit`'s own sources) failed with undefined symbols for
+`_ca_get_device_list` and `_cfstr_get_cstr`, both referenced from
+`ao_avfoundation.m` — a file 0001 had already patched once, but which
+still had two more call sites relying on symbols that don't exist in an
+avfoundation-only iOS build:
+
+- `.list_devs = ca_get_device_list` (in the `audio_out_avfoundation`
+  driver struct): `ca_get_device_list()` itself (in
+  `ao_coreaudio_utils.c`) genuinely needs full CoreAudio HAL device
+  enumeration (`kAudioObjectSystemObject`,
+  `kAudioHardwarePropertyDevices`) — unlike the functions 0002-0006
+  worked to preserve for avfoundation, this one is correctly compiled
+  out entirely under `HAVE_COREAUDIO`-only guards (verified: it sits in
+  the same `#if HAVE_COREAUDIO` block, after patch 0002, as
+  `ca_is_output_device`, both of which 0002 correctly narrowed away from
+  avfoundation). The bug was on the *caller* side: `ao_avfoundation.m`
+  still unconditionally wired it up as `.list_devs` regardless of
+  platform. mpv's own `ao.c` already null-checks `driver->list_devs`
+  before calling it, so the fix simply omits the field under
+  `#if HAVE_COREAUDIO`, matching an existing `#if HAVE_COREAUDIO` block
+  already present elsewhere in this same file (around the SPDIF-error
+  path) for consistency with upstream's own style.
+- `cfstr_get_cstr(...)` (in the `AVObserver`'s restart-notification
+  handler, used only to build a `MP_VERBOSE` log line): this function is
+  genuinely device-independent — plain `CFString`-to-C-string
+  conversion, no HAL involved — but its only definition lives in
+  `osdep/utils-mac.c`, which `meson.build` compiles under
+  `features['cocoa']` (Cocoa/AppKit, correctly disabled on iOS), a
+  *different* meson feature from `coreaudio`/`avfoundation` entirely.
+  Guarded the three lines that build and log `name` with
+  `#if HAVE_COCOA` (not `HAVE_COREAUDIO` — using the wrong macro here
+  would coincidentally work for this iOS build but be semantically
+  incorrect for the actual condition being tested), leaving the
+  `MP_WARN` and `stop`/`start` calls unconditional since they don't
+  depend on `name`.
+
 ## What this unlocks
 
 With these patches applied, `buildscripts/scripts/mpv.sh` re-enables

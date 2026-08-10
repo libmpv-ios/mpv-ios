@@ -22,8 +22,6 @@ behind it, rather than repeating that investigation here.
 
 ## [Unreleased]
 
-## [v0.1.0] - 2026-08-10
-
 ### Added
 
 - OpenGL ES / EAGL rendering path in `MPVGLView.swift`, with VideoToolbox
@@ -90,11 +88,22 @@ behind it, rather than repeating that investigation here.
   naming mismatch (`lua54` vs. the actual `liblua.a`); `libavdevice.a`
   never built at all despite mpv unconditionally referencing two of its
   symbols; and `libz`/`libbz2`/`libiconv` plus several Apple frameworks
-  (`AVFoundation`, `AudioToolbox`, `CoreAudio`, `CoreAudioTypes`,
-  `VideoToolbox`, `CoreMedia`) never declared as linked dependencies
-  anywhere. Fixed in `buildscripts/scripts/mpv-ios.sh`,
+  (`AVFoundation`, `AudioToolbox`, `CoreAudio`, `VideoToolbox`,
+  `CoreMedia`) never declared as linked dependencies anywhere. Fixed in
+  `buildscripts/scripts/mpv-ios.sh`,
   `buildscripts/scripts/ffmpeg.sh`, and `MPVKit/Package.swift`
-  (`docs/RESEARCH.md` #23).
+  (`docs/RESEARCH.md` #23; a `CoreAudioTypes` explicit-link mistake made
+  in that same fix and reverted immediately after is documented as a
+  correction in `docs/RESEARCH.md` #24).
+- Two more undefined symbols (`_ca_get_device_list`, `_cfstr_get_cstr`)
+  surfaced from `ao_avfoundation.m` once the app-level link progressed
+  past entries 23/24's fixes — both were calls to functions correctly
+  excluded from avfoundation-only iOS builds elsewhere, but never
+  guarded at their call sites in this file. New patch
+  `buildscripts/patches/mpv/0008-ao_avfoundation-guard-remaining-undefined-symbols.patch`
+  guards `.list_devs = ca_get_device_list` with `#if HAVE_COREAUDIO` and
+  the notification-handler's `cfstr_get_cstr` usage with
+  `#if HAVE_COCOA` (`docs/RESEARCH.md` #25).
 
 <!--
 ## [X.Y.Z] - YYYY-MM-DD

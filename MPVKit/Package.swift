@@ -91,11 +91,25 @@ let package = Package(
                 // anywhere in this package before, because a plain .a
                 // build never required them - only building an actual app
                 // binary against the combined static lib does.
-                // CoreAudioTypes specifically: Xcode's own auto-linking
-                // tried to infer it from AVFoundation/CoreAudio type
-                // metadata embedded in the combined static lib's object
-                // files, and failed with "framework 'CoreAudioTypes' not
-                // found" - listing it explicitly here resolves that.
+                //
+                // CoreAudioTypes is deliberately NOT listed here. Xcode's
+                // auto-linker emits a *warning* asking for it
+                // ("Could not find or use auto-linked framework
+                // 'CoreAudioTypes': framework 'CoreAudioTypes' not
+                // found"), which looked like something to fix - but
+                // CoreAudioTypes is a header-only umbrella inside
+                // CoreAudio on iOS, not a real standalone linkable
+                // framework binary, and adding it explicitly turns the
+                // soft auto-link warning into a hard, fatal
+                // "ld: framework 'CoreAudioTypes' not found" at actual
+                // link time instead (found in CI immediately after adding
+                // it). Multiple unrelated projects hitting the same
+                // warning (a Realm-Swift issue, several Apple Developer
+                // Forums threads, a Google Mobile Ads SDK support
+                // thread) converge on the same fix: leave it out - it's
+                // already implicitly available, and the warning itself
+                // remains harmless as long as nothing explicitly demands
+                // the nonexistent framework file.
                 .linkedFramework("AVFoundation"),
                 .linkedFramework("AudioToolbox"),
                 .linkedFramework("CoreAudio"),
