@@ -1,0 +1,56 @@
+name: MPVIOSPlayer
+
+# Consumed by `xcodegen generate --spec project.yml` in
+# .github/workflows/appetize-preview.yml to produce MPVIOSPlayer.xcodeproj
+# on the fly in CI, so the .xcodeproj itself doesn't need to be committed
+# (avoiding the usual Xcode-project-in-git merge-conflict pain). If you
+# add new source files, new resources, or change the deployment target,
+# update this file — the generated .xcodeproj is disposable and reflects
+# whatever is described here, not anything hand-edited in Xcode.
+#
+# Local use: `brew install xcodegen && xcodegen generate` from repo root,
+# then open MPVIOSPlayer.xcodeproj.
+
+options:
+  bundleIdPrefix: dev.aeoncorex
+  deploymentTarget:
+    iOS: "14.0"
+
+packages:
+  MPVKit:
+    path: MPVKit
+
+targets:
+  MPVIOSPlayer:
+    type: application
+    platform: iOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: mpv-ios-player
+    resources:
+      - path: mpv-ios-player/Assets.xcassets
+    info:
+      path: mpv-ios-player/Info.plist
+      properties:
+        UILaunchScreen: {}
+    settings:
+      base:
+        PRODUCT_NAME: MPVIOSPlayer
+        PRODUCT_BUNDLE_IDENTIFIER: dev.aeoncorex.mpv-ios-player
+        SWIFT_VERSION: 5.9
+        TARGETED_DEVICE_FAMILY: "1,2"
+        # mpv-ios-player links MPVKit, which in turn links
+        # Libmpv.xcframework (a real ~100MB+ static/binary framework once
+        # ffmpeg/libass/libplacebo etc. are merged in) — this needs to
+        # already exist at MPVKit/Frameworks/Libmpv.xcframework before this
+        # target can build. appetize-preview.yml's "Download
+        # Libmpv.xcframework from a release" step handles that in CI; for
+        # a local build, run buildscripts/scripts/mpv-ios.sh first (see
+        # README.md) or download Libmpv.xcframework.zip from the latest
+        # GitHub Release and unzip it into MPVKit/Frameworks/ yourself.
+    dependencies:
+      - package: MPVKit
+        product: MPVKit
+    scheme:
+      testTargets: []
+      gatherCoverageData: false
