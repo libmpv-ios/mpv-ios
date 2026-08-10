@@ -55,6 +55,10 @@ behind it, rather than repeating that investigation here.
   pointers didn't outlive the call to `mpv_render_context_render`; now
   scoped explicitly via `withUnsafeMutablePointer` (`docs/RESEARCH.md`
   #21).
+- `project.yml`'s `MPVIOSPlayer` app target deployment target raised from
+  14.0 to 16.0 to match the iOS 16+ SwiftUI APIs (`NavigationStack`,
+  `@Environment(\.dismiss)`) the example app's own source already uses;
+  `MPVKit`'s own iOS 14.0+ floor is unaffected (`docs/RESEARCH.md` #22).
 
 <!--
 ## [X.Y.Z] - YYYY-MM-DD

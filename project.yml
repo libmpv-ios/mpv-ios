@@ -24,7 +24,19 @@ targets:
   MPVIOSPlayer:
     type: application
     platform: iOS
-    deploymentTarget: "14.0"
+    # MPVKit (the library) supports iOS 14.0+ per its own Package.swift —
+    # that floor is intentionally left alone in `options.deploymentTarget`
+    # above. This app target is pinned higher, to 16.0, because
+    # mpv-ios-player's own SwiftUI code already uses NavigationStack
+    # (MPVRootView.swift, TrackSelectionSheet.swift — iOS 16+) and
+    # @Environment(\.dismiss) (TrackSelectionSheet.swift — iOS 15+). 16.0
+    # is the actual minimum this example app's existing code compiles
+    # against; setting it lower here would just move the "iOS 15.0 or
+    # newer" compiler error from CI to whoever's device happens to run an
+    # older iOS. If the example app is ever rewritten to avoid these APIs
+    # (NavigationView + an iOS-14-compatible dismiss pattern), this can
+    # drop back down to match MPVKit's 14.0 floor.
+    deploymentTarget: "16.0"
     sources:
       - path: mpv-ios-player
     resources:
@@ -39,6 +51,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: dev.aeoncorex.mpv-ios-player
         SWIFT_VERSION: 5.9
         TARGETED_DEVICE_FAMILY: "1,2"
+        IPHONEOS_DEPLOYMENT_TARGET: "16.0"
         # mpv-ios-player links MPVKit, which in turn links
         # Libmpv.xcframework (a real ~100MB+ static/binary framework once
         # ffmpeg/libass/libplacebo etc. are merged in) — this needs to
