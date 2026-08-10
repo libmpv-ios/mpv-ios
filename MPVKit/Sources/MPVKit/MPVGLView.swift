@@ -301,14 +301,33 @@ public final class MPVGLView: UIView {
         var flipY: CInt = 0
         var skip: CInt = 0
 
-        var renderParams: [mpv_render_param] = [
-            mpv_render_param(type: MPV_RENDER_PARAM_OPENGL_FBO, data: &fbo),
-            mpv_render_param(type: MPV_RENDER_PARAM_FLIP_Y, data: &flipY),
-            mpv_render_param(type: MPV_RENDER_PARAM_SKIP_RENDERING, data: &skip),
-            mpv_render_param(type: MPV_RENDER_PARAM_INVALID, data: nil)
-        ]
-
-        let result = mpv_render_context_render(ctx, &renderParams)
+        // `&fbo`/`&flipY`/`&skip` cannot be taken directly inside the
+        // `renderParams` array literal below: Swift's inout-to-pointer
+        // conversion only guarantees the pointer is valid for the single
+        // call it's passed to, not for as long as it sits inside an array
+        // that's read later by `mpv_render_context_render`. Building the
+        // array that way compiles as of older toolchains but is rejected
+        // under Xcode 16's stricter pointer-lifetime checking ("argument
+        // 'data' must be a pointer that outlives the call"), and even
+        // where it compiled it was technically undefined behavior — the
+        // pointer could easily have been invalidated before use.
+        // `withUnsafeMutablePointer` instead gives each pointer an
+        // explicit, checkable lifetime that we control, spanning exactly
+        // the `mpv_render_context_render` call — the same pattern already
+        // used for MPV_RENDER_PARAM_OPENGL_INIT_PARAMS above.
+        let result = withUnsafeMutablePointer(to: &fbo) { fboPtr in
+            withUnsafeMutablePointer(to: &flipY) { flipYPtr in
+                withUnsafeMutablePointer(to: &skip) { skipPtr in
+                    var renderParams: [mpv_render_param] = [
+                        mpv_render_param(type: MPV_RENDER_PARAM_OPENGL_FBO, data: UnsafeMutableRawPointer(fboPtr)),
+                        mpv_render_param(type: MPV_RENDER_PARAM_FLIP_Y, data: UnsafeMutableRawPointer(flipYPtr)),
+                        mpv_render_param(type: MPV_RENDER_PARAM_SKIP_RENDERING, data: UnsafeMutableRawPointer(skipPtr)),
+                        mpv_render_param(type: MPV_RENDER_PARAM_INVALID, data: nil)
+                    ]
+                    return mpv_render_context_render(ctx, &renderParams)
+                }
+            }
+        }
         if result < 0 {
             return
         }

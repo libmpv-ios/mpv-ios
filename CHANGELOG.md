@@ -22,8 +22,6 @@ behind it, rather than repeating that investigation here.
 
 ## [Unreleased]
 
-## [v0.1.0] - 2026-08-09
-
 ### Added
 
 - OpenGL ES / EAGL rendering path in `MPVGLView.swift`, with VideoToolbox
@@ -52,6 +50,11 @@ behind it, rather than repeating that investigation here.
   bridging mismatches, `DispatchQueue.sync` overload ambiguity, and an
   Xcode 16.2 change in how a `const char *` macro imports into Swift
   (`docs/RESEARCH.md` #17–20).
+- Per-frame render call in `MPVGLView.swift` passing `&fbo`/`&flipY`/
+  `&skip` inline inside an `mpv_render_param` array literal, whose
+  pointers didn't outlive the call to `mpv_render_context_render`; now
+  scoped explicitly via `withUnsafeMutablePointer` (`docs/RESEARCH.md`
+  #21).
 
 <!--
 ## [X.Y.Z] - YYYY-MM-DD
