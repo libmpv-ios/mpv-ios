@@ -22,8 +22,6 @@ behind it, rather than repeating that investigation here.
 
 ## [Unreleased]
 
-## [v0.1.0] - 2026-08-10
-
 ### Added
 
 - OpenGL ES / EAGL rendering path in `MPVGLView.swift`, with VideoToolbox
@@ -85,6 +83,16 @@ behind it, rather than repeating that investigation here.
   14.0 to 16.0 to match the iOS 16+ SwiftUI APIs (`NavigationStack`,
   `@Environment(\.dismiss)`) the example app's own source already uses;
   `MPVKit`'s own iOS 14.0+ floor is unaffected (`docs/RESEARCH.md` #22).
+- First real app-level link failed with three independent bugs: Lua's
+  static lib silently dropped from every combine due to a `LIBNAMES`
+  naming mismatch (`lua54` vs. the actual `liblua.a`); `libavdevice.a`
+  never built at all despite mpv unconditionally referencing two of its
+  symbols; and `libz`/`libbz2`/`libiconv` plus several Apple frameworks
+  (`AVFoundation`, `AudioToolbox`, `CoreAudio`, `CoreAudioTypes`,
+  `VideoToolbox`, `CoreMedia`) never declared as linked dependencies
+  anywhere. Fixed in `buildscripts/scripts/mpv-ios.sh`,
+  `buildscripts/scripts/ffmpeg.sh`, and `MPVKit/Package.swift`
+  (`docs/RESEARCH.md` #23).
 
 <!--
 ## [X.Y.Z] - YYYY-MM-DD
