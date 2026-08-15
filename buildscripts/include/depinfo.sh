@@ -7,7 +7,7 @@
 
 v_lua=5.2.4
 v_unibreak=7.0
-v_harfbuzz=14.2.1
+v_harfbuzz=14.3.1
 v_fribidi=1.0.16
 v_freetype=2.14.3
 v_mbedtls=3.6.5
