@@ -11,7 +11,7 @@ v_harfbuzz=14.3.1
 v_fribidi=1.0.16
 v_freetype=2.14.3
 v_mbedtls=3.6.5
-v_libxml2=2.15.3
+v_libxml2=2.15.4
 
 # iOS minimum deployment target
 v_ios_min=13.0
