@@ -177,14 +177,10 @@ destination as above, or building via Xcode directly, is the normal path.)
   instead, matching how mpv itself is typically built for Apple platforms.
 - **Static linking throughout**, merged into one XCFramework, since iOS App
   Store apps can't casually ship a collection of loose `.dylib`s the way
-  Android apps ship `.so` files per-ABI.
+  Android apps ship `.so` files.
 
-## License note
+## License
 
-mpv and its dependency stack are AGPL-3.0 licensed (exact terms depend on
-which options are enabled at build time — see `buildscripts/scripts/ffmpeg.sh`,
-which enables `--enable-gpl --enable-version3`). Distributing this app on the
-App Store means complying with those licenses (e.g. providing corresponding
-source, per how other GPL-licensed App Store apps like VLC handle it). This
-is a licensing/legal consideration for you to review, not something this
-codebase resolves on your behalf.
+This project is licensed under the **Apache License 2.0** — see [LICENSE](LICENSE) for details.
+
+Note: mpv and its dependencies are licensed under various open-source licenses (including GPL/LGPL). When distributing this project, ensure compliance with all dependency licenses.
