@@ -1,0 +1,133 @@
+name: iOS Device IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios-device:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+
+          if [ -z "$LATEST" ]; then
+            echo "::error::No Xcode installation found."
+            exit 1
+          fi
+
+          echo "Using $LATEST"
+          sudo xcode-select -s "$LATEST/Contents/Developer"
+
+          xcodebuild -version
+          xcodebuild -showsdks
+
+      - name: Install build tools
+        run: |
+          brew install xcodegen xcbeautify
+
+      - name: Download Libmpv.xcframework
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_REPO: AeonCoreX-Lab/mpv-ios
+        run: |
+          mkdir -p MPVKit/Frameworks
+
+          echo "Downloading Libmpv.xcframework..."
+
+          if gh release download \
+            --repo "$UPSTREAM_REPO" \
+            --pattern "Libmpv.xcframework.zip" \
+            --dir /tmp \
+            --clobber; then
+            echo "Downloaded from upstream release."
+          elif gh release download \
+            --pattern "Libmpv.xcframework.zip" \
+            --dir /tmp \
+            --clobber; then
+            echo "Downloaded from current repository release."
+          else
+            echo "::error::Could not find Libmpv.xcframework.zip."
+            exit 1
+          fi
+
+          ditto -x -k \
+            /tmp/Libmpv.xcframework.zip \
+            MPVKit/Frameworks/
+
+          test -d MPVKit/Frameworks/Libmpv.xcframework
+
+      - name: Generate Xcode project
+        run: |
+          xcodegen generate --spec project.yml
+
+      - name: Build iOS device app
+        run: |
+          set -o pipefail
+
+          xcodebuild \
+            -project MPVIOSPlayer.xcodeproj \
+            -scheme MPVIOSPlayer \
+            -sdk iphoneos \
+            -configuration Release \
+            -derivedDataPath build-device \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build | xcbeautify
+
+      - name: Locate device .app
+        run: |
+          APP_PATH=$(find build-device \
+            -type d \
+            -name "MPVIOSPlayer.app" \
+            -path "*iphoneos*" \
+            -print -quit)
+
+          if [ -z "$APP_PATH" ]; then
+            echo "::error::Device .app was not found."
+            exit 1
+          fi
+
+          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+          echo "Found: $APP_PATH"
+
+      - name: Verify device architecture
+        run: |
+          echo "Checking executable architecture..."
+
+          file "$APP_PATH/MPVIOSPlayer"
+
+          if ! file "$APP_PATH/MPVIOSPlayer" | grep -q "arm64"; then
+            echo "::error::The application is not an arm64 iOS device binary."
+            exit 1
+          fi
+
+      - name: Create unsigned IPA
+        run: |
+          mkdir -p ipa/Payload
+
+          cp -R "$APP_PATH" ipa/Payload/MPVIOSPlayer.app
+
+          cd ipa
+          zip -r -q \
+            "$GITHUB_WORKSPACE/MPVIOSPlayer-unsigned.ipa" \
+            Payload
+
+          cd "$GITHUB_WORKSPACE"
+
+          echo "Created:"
+          ls -lh MPVIOSPlayer-unsigned.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MPVIOSPlayer-unsigned-IPA
+          path: MPVIOSPlayer-unsigned.ipa
+          if-no-files-found: error
