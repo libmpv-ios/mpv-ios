@@ -32,6 +32,14 @@ behind it, rather than repeating that investigation here.
   headless gesture recognizer in `MPVKit` (no UIKit/SwiftUI dependency),
   wired into `MPVPlayerView`/`PlayerViewModel`.
 
+### Fixed
+
+- `MPVPlayer.swift`: `loadFile(_:mode:)` was declared twice in the same
+  `MPVCore` extension (an exact duplicate introduced when playlist
+  support was added), causing an "invalid redeclaration" compile error.
+  Removed the duplicate, kept the more fully-commented version under the
+  "Playlist" section (`docs/RESEARCH.md` #35).
+
 ## [v0.1.0] - 2026-08-10
 
 ### Added

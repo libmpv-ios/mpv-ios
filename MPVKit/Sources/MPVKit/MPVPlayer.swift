@@ -78,12 +78,19 @@ public struct MPVPlaylistItem: Identifiable, Equatable {
 public extension MPVCore {
 
     // MARK: - Loading
-
-    /// Loads a local file path or a network URL for playback.
-    /// Equivalent to MPVView.kt's playFile() -> MPVLib.command(["loadfile", path]).
-    func loadFile(_ path: String, mode: MPVLoadMode = .replace) {
-        command(["loadfile", path, mode.rawValue])
-    }
+    //
+    // loadFile itself now lives in the "Playlist" section further down
+    // this file (it's mpv's own `loadfile` command, which is also how
+    // playlist entries get added/replace/inserted — see that section's
+    // doc comment for why `append+play` is used over the deprecated
+    // `append-play`). Kept as one definition, not two: an earlier version
+    // of this file had loadFile declared here AND in the Playlist
+    // section (byte-identical signature and body, added when playlist
+    // support was ported from mpv-android's PlaylistDialog), which is an
+    // "invalid redeclaration" compile error - Swift does not allow two
+    // methods with the same signature on the same extended type, even
+    // when the bodies are identical. Found via the actual CI failure
+    // log, not by inspection alone.
 
     // MARK: - Transport controls
 
