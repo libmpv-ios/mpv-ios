@@ -72,7 +72,7 @@ public struct MPVPlayerView: View {
                                     // in the Kotlin original).
                                     mightWantToToggleControls = true
                                 } else {
-                                    if viewModel.touchGestures.touchMoved(at: value.location) {
+                                    if viewModel.touchGestures.touchMoved(to: value.location) {
                                         scheduleAutoHide()
                                     }
                                     if viewModel.gestureDidCancelTapToggle {

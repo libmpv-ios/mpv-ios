@@ -65,6 +65,10 @@ behind it, rather than repeating that investigation here.
   support was added), causing an "invalid redeclaration" compile error.
   Removed the duplicate, kept the more fully-commented version under the
   "Playlist" section (`docs/RESEARCH.md` #35).
+- `MPVPlayerView.swift`: the drag-gesture handler called
+  `touchGestures.touchMoved(at:)`, but `MPVTouchGestures` declares it as
+  `touchMoved(to:)`, causing an "incorrect argument label" compile error.
+  Fixed the call site to use `to:` (`docs/RESEARCH.md` #36).
 
 ## [v0.1.0] - 2026-08-10
 
