@@ -1,6 +1,7 @@
 # mpv for IOS
 
 [![Build Status](https://github.com/libmpv-ios/mpv-ios/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/libmpv-ios/mpv-ios/actions/workflows/build.yml)
+[![Latest Release](https://img.shields.io/github/v/release/libmpv-ios/mpv-ios?style=flat&label=release&color=blue)](https://github.com/libmpv-ios/mpv-ios/releases/latest)
 
 mpv-ios is a video player for iOS based on [libmpv](https://github.com/mpv-player/mpv).
 
@@ -96,7 +97,7 @@ the only one in the target).
 
 Since the icon was upscaled 2x from a 512×512 source rather than authored
 natively at 1024×1024, consider commissioning or vectorizing a native
-high-resolution version before shipping to the App Store ��� the upscale is
+high-resolution version before shipping to the App Store — the upscale is
 clean enough for development/TestFlight but a from-scratch 1024×1024 (or an
 SVG re-export, since mpv-android's `mpv_logo.xml` is a vector drawable) will
 look sharper on device.
