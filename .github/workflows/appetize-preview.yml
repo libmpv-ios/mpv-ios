@@ -146,6 +146,15 @@ jobs:
           publicKey: ${{ vars.APPETIZE_PUBLIC_KEY }}
           platform: 'ios'
 
+      - name: Upload .app to GitHub Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mpv-ios-player-app
+          path: mpv-ios-preview.zip
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Print instructions
         run: |
           echo "Preview build uploaded."
