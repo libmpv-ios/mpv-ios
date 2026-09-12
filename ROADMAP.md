@@ -69,10 +69,10 @@ in any order:
 - [X] Gesture controls: swipe to seek/adjust volume/adjust brightness
       (mpv-android has this; `MPVPlayerView` currently only has tap and
       button controls).
-- [ ] Subtitle customization: style, size, delay/sync adjustment, and
+- [X] Subtitle customization: style, size, delay/sync adjustment, and
       picking among embedded subtitle formats mpv supports.
-- [ ] Chapter navigation.
-- [ ] A-B repeat and playback speed presets.
+- [X] Chapter navigation.
+- [X] A-B repeat and playback speed presets.
 - [X] Picture-in-Picture support.
 - [X] Now Playing / Control Center / lock-screen remote control
       integration (`MPRemoteCommandCenter` /
