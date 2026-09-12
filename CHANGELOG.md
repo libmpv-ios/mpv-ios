@@ -22,6 +22,8 @@ behind it, rather than repeating that investigation here.
 
 ## [Unreleased]
 
+## [v0.1.1] - 2026-09-12
+
 ### Added
 
 - Touch gesture support in `mpv-ios-player`, ported from mpv-android's
