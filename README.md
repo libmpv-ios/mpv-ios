@@ -2,8 +2,8 @@
 
 [![Build Status](https://github.com/libmpv-ios/mpv-ios/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/libmpv-ios/mpv-ios/actions/workflows/build.yml)
 [![Latest Release](https://img.shields.io/github/v/release/libmpv-ios/mpv-ios?style=flat&label=release&color=blue)](https://github.com/libmpv-ios/mpv-ios/releases/latest)
-[![Languages](https://img.shields.io/badge/Swift-80.9%25-FA7343?style=flat)](https://github.com/libmpv-ios/mpv-ios)
-[![Language Stats](https://img.shields.io/badge/Shell-19.4%25-4EAA25?style=flat&logo=gnu-bash)](https://github.com/libmpv-ios/mpv-ios)
+[![GitHub language count](https://img.shields.io/github/languages/count/libmpv-ios/mpv-ios?style=flat&label=languages&color=blueviolet)](https://github.com/libmpv-ios/mpv-ios)
+[![Top Language](https://img.shields.io/github/languages/top/libmpv-ios/mpv-ios?style=flat&color=FA7343)](https://github.com/libmpv-ios/mpv-ios)
 
 mpv-ios is a video player for iOS based on [libmpv](https://github.com/mpv-player/mpv).
 
