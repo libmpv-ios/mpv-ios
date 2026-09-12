@@ -30,7 +30,33 @@ behind it, rather than repeating that investigation here.
   center play/pause), plus the tap-to-toggle-controls fallback for plain
   taps that don't trigger a gesture. New reusable `MPVTouchGestures`
   headless gesture recognizer in `MPVKit` (no UIKit/SwiftUI dependency),
-  wired into `MPVPlayerView`/`PlayerViewModel`.
+  wired into `MPVPlayerView`/`PlayerViewModel` (`docs/RESEARCH.md` #26).
+- Control Center/lock-screen media controls and Picture in Picture support,
+  with `MediaSessionManager`, `PictureInPictureRenderer`,
+  `PictureInPictureCoordinator`, and the required iOS background/rendering
+  integration (`docs/RESEARCH.md` #27).
+- Playlist management with loading, append, navigation, removal, movement,
+  clearing, shuffling, playlist UI, and Control Center next/previous-track
+  commands, using per-entry property reads and explicit refresh after
+  `playlist-move` (`docs/RESEARCH.md` #28).
+- Runtime hardware/software decoder selection with active-decoder
+  observation and a decoder picker integrated into the track-selection UI
+  (`docs/RESEARCH.md` #29).
+- Subtitle styling controls for delay, scale, position, text color, and
+  background color through a dedicated `SubtitleStyleSheet` (`docs/RESEARCH.md` #30).
+- Video scaling and interpolation controls covering spatial/chroma/downscale/
+  temporal scaling, interpolation, aspect mode, zoom, rotation, panscan, and
+  unscaled-video behavior through a dedicated `VideoSettingsSheet`
+  (`docs/RESEARCH.md` #31).
+- Persistent playback-position saving and removal using mpv's built-in
+  watch-later mechanism, triggered on stop and app backgrounding
+  (`docs/RESEARCH.md` #32).
+- A playback statistics overlay showing codec, resolution, FPS, hardware
+  decoder, bitrate, A/V sync, dropped frames, and cache state, with periodic
+  updates while visible (`docs/RESEARCH.md` #33).
+- Orientation controls with auto, landscape, portrait, and unlocked modes,
+  including tap-to-toggle and long-press selection backed by a new
+  `AppDelegate` orientation controller (`docs/RESEARCH.md` #34).
 
 ### Fixed
 
