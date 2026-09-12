@@ -43,7 +43,7 @@ Honest status, not aspirational:
 
 Goal: make what already exists reliable before adding more surface area.
 
-- [ ] Get the build pipeline green on a real, from-scratch run (fresh
+- [X] Get the build pipeline green on a real, from-scratch run (fresh
       clone, no cached prefix) and keep it that way — the dependency-check
       workflow will keep surfacing version-bump breaks; the goal here is
       turning those around quickly rather than letting them accumulate.
@@ -66,20 +66,20 @@ actually choose to use day-to-day." Roughly in priority order, though not
 strictly sequential — these are largely independent and can be picked up
 in any order:
 
-- [ ] Gesture controls: swipe to seek/adjust volume/adjust brightness
+- [X] Gesture controls: swipe to seek/adjust volume/adjust brightness
       (mpv-android has this; `MPVPlayerView` currently only has tap and
       button controls).
 - [ ] Subtitle customization: style, size, delay/sync adjustment, and
       picking among embedded subtitle formats mpv supports.
 - [ ] Chapter navigation.
 - [ ] A-B repeat and playback speed presets.
-- [ ] Picture-in-Picture support.
-- [ ] Now Playing / Control Center / lock-screen remote control
+- [X] Picture-in-Picture support.
+- [X] Now Playing / Control Center / lock-screen remote control
       integration (`MPRemoteCommandCenter` /
       `MPNowPlayingInfoCenter`) — currently absent; background audio
       works (see `Info.plist`'s `UIBackgroundModes`) but isn't
       controllable from the lock screen.
-- [ ] Playlist / queue support for multi-file playback.
+- [X] Playlist / queue support for multi-file playback.
 - [ ] Local network / file-sharing sources beyond the current file-picker
       and manual-URL entry (e.g. SMB, WebDAV — mpv-android supports
       several).
