@@ -12,6 +12,7 @@ public struct MPVRootView: View {
     @State private var showURLInput = false
     @State private var urlText = ""
     @State private var selectedURL: URL?
+    @State private var additionalPlaylistURLs: [URL] = []
 
     public init() {}
 
@@ -50,14 +51,26 @@ public struct MPVRootView: View {
             .fileImporter(
                 isPresented: $showDocumentPicker,
                 allowedContentTypes: [.movie, .video, .mpeg4Movie, .audio, .mp3, .item],
+                allowsMultipleSelection: true,
                 onCompletion: { result in
-                    if case .success(let url) = result {
-                        // Start accessing a security-scoped resource, matching
-                        // the access pattern required for files outside the
-                        // app sandbox (iCloud Drive, Files providers, etc.).
-                        // The player itself re-derives the path from this URL.
-                        _ = url.startAccessingSecurityScopedResource()
-                        selectedURL = url
+                    if case .success(let urls) = result, !urls.isEmpty {
+                        // Start accessing a security-scoped resource for
+                        // every selected file, matching the access
+                        // pattern required for files outside the app
+                        // sandbox (iCloud Drive, Files providers, etc.) —
+                        // not just the first one, since every URL here
+                        // (not only the one MPVPlayerView opens directly)
+                        // is read by mpv, either now (the first file) or
+                        // later when the playlist advances to it.
+                        for url in urls {
+                            _ = url.startAccessingSecurityScopedResource()
+                        }
+                        selectedURL = urls[0]
+                        // Remaining files (if any) become additional
+                        // playlist entries once MPVPlayerView has loaded
+                        // the first one — see MPVPlayerView's own use of
+                        // this array in its .onAppear.
+                        additionalPlaylistURLs = Array(urls.dropFirst())
                     }
                 }
             )
@@ -73,10 +86,14 @@ public struct MPVRootView: View {
                 }
             }
             .fullScreenCover(item: $selectedURL) { url in
-                MPVPlayerView(url: url) {
+                MPVPlayerView(url: url, additionalPlaylistURLs: additionalPlaylistURLs) {
                     if url.isFileURL {
                         url.stopAccessingSecurityScopedResource()
                     }
+                    for extra in additionalPlaylistURLs where extra.isFileURL {
+                        extra.stopAccessingSecurityScopedResource()
+                    }
+                    additionalPlaylistURLs = []
                     selectedURL = nil
                 }
             }

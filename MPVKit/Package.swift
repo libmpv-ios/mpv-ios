@@ -115,6 +115,13 @@ let package = Package(
                 .linkedFramework("CoreAudio"),
                 .linkedFramework("VideoToolbox"),
                 .linkedFramework("CoreMedia"),
+                // Required for PictureInPictureRenderer.swift's
+                // CVOpenGLESTextureCache / CVPixelBufferPool usage.
+                // Following this file's own documented lesson just above
+                // (a static library never pulls in its own framework
+                // dependencies automatically) rather than assuming
+                // CoreMedia/AVFoundation transitively cover it.
+                .linkedFramework("CoreVideo"),
             ]
         ),
     ],

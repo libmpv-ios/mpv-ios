@@ -1480,6 +1480,721 @@ a superficially-plausible one-liner — a wrong verification method that
 happens to usually pass is worse than no verification, because it
 produces false confidence.
 
+## 26. Porting mpv-android's touch gestures: two real iOS platform constraints, not bugs
+
+**What was ported:** mpv-android's `TouchGestures.kt` state machine (swipe
+seek/volume/brightness, tap-left/tap-right/tap-center gestures, the
+deadzone/throttling/tap-timing constants) and the corresponding handling
+in `MPVActivity.kt`'s `onPropertyChange`, as a new headless
+`MPVTouchGestures` class in `MPVKit` plus gesture-handling logic in
+`PlayerViewModel`. The state machine itself (touch-down/move/up,
+Control-state transitions, tap-region math) ports directly with no
+behavioral differences - it has no Android-specific dependency to begin
+with. Two real platform differences turned up in the *observer* side
+(the `onPropertyChange`-equivalent logic), both confirmed by checking
+current documentation/API behavior rather than assumed:
+
+**1. iOS apps cannot set system volume programmatically.**
+mpv-android's volume gesture calls `AudioManager.setStreamVolume()`
+directly on the system audio stream. iOS has no equivalent: an app can
+*read* `AVAudioSession.sharedInstance().outputVolume`, but cannot set
+it - the only way to change system volume from app code at all is
+indirectly, by manipulating the hidden slider inside an `MPVolumeView`,
+which still requires that view to exist in the hierarchy and is a
+workaround rather than a supported direct-set API. `outputVolume` is
+also documented (multiple current Apple Developer Forums threads, iOS
+18) as unreliable for *reading* the current value in several
+situations - stale after backgrounding, reports 0 immediately after
+audio session activation. Given both constraints, the ported gesture
+adjusts mpv's own in-app `volume` property (0-100) instead of system
+volume. This is a permanent, deliberate platform difference from
+mpv-android, not a stand-in for a "real" fix.
+
+**2. `UIScreen.main.brightness` doesn't persist past a lock.**
+Still the current, non-deprecated API for reading/setting app-level
+screen brightness (confirmed directly, not assumed, given how easy
+brightness APIs are to get wrong across iOS versions). Unlike Android's
+`WindowManager.LayoutParams.screenBrightness` (which mpv-android's
+`updateScreenBrightness()` sets and which persists for the Activity's
+lifetime), a brightness set via `UIScreen.main.brightness` reverts to
+the user's actual system brightness setting the next time the device
+unlocks. Not a bug to work around - just a real behavior difference
+worth knowing about so it isn't mistaken for the gesture code failing to
+"stick."
+
+**Design choice carried over intentionally:** `MPVTouchGestures` has zero
+UIKit/SwiftUI/mpv dependency, matching `TouchGestures.kt`'s own
+separation from `MPVActivity` - it only computes state-machine
+transitions and reports `MPVPropertyChange` cases through a delegate
+protocol (`MPVGestureObserver`), the same division of responsibility as
+the Kotlin original's `TouchGesturesObserver` interface. `PlayerViewModel`
+plays the role `MPVActivity.kt`'s `onPropertyChange` override plays:
+translating an abstract property-change event into concrete seek/volume/
+brightness/pause actions.
+
+**Verified before writing, not assumed:**
+- `MPVCore`/`MPVPlayer`'s actual public API (`core.seek(to:)`,
+  `core.volume`, `core.isPaused`, `core.command(_:)`) was checked
+  directly against `MPVPlayer.swift` rather than guessed from the
+  gesture code's needs - an earlier draft used a nonexistent
+  `core.timePos` setter before this check caught it.
+- `MPVCoreDelegate`'s existing `nonisolated func mpv(...)` conformance
+  pattern in `PlayerViewModel` was checked and matched exactly for the
+  new `MPVGestureObserver` conformance, rather than introducing a
+  different (and potentially actor-isolation-incompatible) pattern for
+  gesture callbacks specifically.
+- The two-parameter `onChange(of:) { oldValue, newValue in }` SwiftUI
+  API is iOS 17+ only (confirmed via search) - this project's
+  `MPVIOSPlayer` app target deployment target is 16.0 (see entry 22), so
+  the single-parameter `onChange(of:perform:)` form was used instead.
+  Using the newer form here would have reintroduced exactly the kind of
+  deployment-target/API-availability mismatch entry 22 already had to
+  fix once.
+
+**Lesson:** porting a state machine that has no platform dependency is
+mechanical and low-risk; porting the *handler* that reacts to it is
+where the real platform differences live, and claiming a platform
+constraint exists (e.g. "iOS has no way to read current volume") without
+checking current documentation is itself a risk - the accurate claim
+here ("no way to *set* it silently, and *reading* it is documented as
+unreliable in specific situations") is more precise and more useful than
+a vaguer, unverified version of the same point would have been.
+
+---
+
+## 27. Media Session + Picture in Picture: two features where the "obvious" iOS API is a documented trap
+
+**What was added:** Control Center/lock-screen integration
+(`MediaSessionManager`, wrapping `MPNowPlayingInfoCenter` +
+`MPRemoteCommandCenter` + `AVAudioSession` interruption/route-change
+notifications) and Picture in Picture (`PictureInPictureRenderer` in
+MPVKit, `PictureInPictureCoordinator` + `PictureInPictureLayerView` in
+the app target). Both features have an "obvious first approach" that
+turned out to be wrong or unsafe on inspection, in a way this entry
+records so neither gets silently reintroduced later.
+
+**1. `mpv_render_context_render()` cannot safely be called twice per
+frame.** The first PiP design considered was: render once for the
+screen (existing path, unchanged), then render a second time into a
+separate FBO sized for PiP. `render.h`'s own documentation rules this
+out — each call "implicitly pulls a video frame from the internal
+queue," so two calls per displayed frame risk the screen and PiP paths
+showing different frames, or one starving the other. The actual design
+renders once (screen path, byte-for-byte unchanged) and reads back that
+same already-rendered frame via `glBlitFramebuffer` (OpenGL ES 3.0,
+confirmed available given this project's `.openGLES3` context) into an
+IOSurface-backed `CVPixelBuffer` — a GPU-side copy, not a second mpv
+render and not a `glReadPixels` CPU readback.
+
+**2. `CVOpenGLESTextureCacheCreateTextureFromImage`'s internal-format
+parameter is not the same kind of thing as a sized GL storage enum.**
+An early draft passed `GL_RGBA8_OES` as `internalFormat` (reasoning by
+analogy from unrelated render-target-texture-storage code elsewhere).
+Checked against a working reference implementation
+(a widely-cited "render to IOSurface-backed CVPixelBuffer via texture
+cache" writeup) rather than assumed: the correct triple for a BGRA
+`CVPixelBuffer` is `internalFormat=GL_RGBA` (channel count, not a sized
+OES enum) with `format=GL_BGRA` / `type=GL_UNSIGNED_BYTE` describing the
+buffer's actual memory layout. Worth remembering this API doesn't follow
+the same convention as plain `glTexStorage2D`-style calls elsewhere in
+GL code, even though the parameter is also named "internalFormat" there.
+
+**3. The "standard" iOS trick for setting system volume is an
+Apple-acknowledged unsupported hack, not a sanctioned workaround.**
+Already covered from the gesture-porting side in entry 26; recorded
+again here because `MediaSessionManager`'s remote-command handling
+raised the same question independently (whether PiP/lock-screen volume
+controls should drive system volume) and reached the same answer for
+the same reason — `AVAudioSession.outputVolume` is read-only, and the
+`MPVolumeView`-slider trick reaches into a private view hierarchy Apple
+has stated isn't supported and which behaves inconsistently with
+AirPlay across iOS versions.
+
+**4. `MPNowPlayingInfoPropertyMediaType` and
+`MPMediaItemPropertyMediaType` are two different keys expecting two
+different enums, and mixing them up is a real shipped mistake, not a
+hypothetical one.** Confirmed via IINA's own GitHub issue tracker
+containing exactly this confusion. `MediaSessionManager.updateMetadata`
+uses the correct key deliberately, with a comment warning against
+"correcting" it to the similarly-named one.
+
+**5. `MPMediaItemArtwork`'s `requestHandler` closure has an
+Apple-DTS-acknowledged, still-unresolved crash risk under Swift 6
+strict concurrency** when it captures and returns an external `UIImage`
+value — exactly the shape `updateMetadata` uses. This project currently
+builds under Swift 5.9 (`project.yml`), so it isn't hit today; flagged
+in-code so a future move to Swift 6 language mode re-checks Apple's
+developer forums rather than assuming this still works unchanged.
+
+**6. `AVSampleBufferDisplayLayer` renders nothing — and cannot support
+PiP — while it has a zero-size frame or isn't in any view's layer
+hierarchy**, confirmed via an Apple Developer Forums thread reporting
+exactly that failure mode. `PictureInPictureLayerView` therefore hosts
+the coordinator's `displayLayer` at a real, non-zero size at all times
+and hides it with `.opacity(0)` rather than `.hidden` or a zero frame,
+specifically to avoid silently breaking PiP the next time it's
+requested.
+
+**7. `UIBackgroundModes` needs both `audio` and `picture-in-picture`
+for PiP to keep rendering once backgrounded** — this project already
+had `audio` (for background audio playback, unrelated to PiP), and it
+alone is not sufficient; multiple third-party PiP integration guides
+add both keys together via Xcode's combined "Audio, AirPlay, and
+Picture in Picture" capability checkbox, which was the signal that these
+are treated as a pair, not that `audio` implies the other.
+
+**8. `AVSampleBufferDisplayLayer.enqueue(_:)` is safe to call from a
+background queue** — confirmed against the WWDC 2014 reference pattern
+for this API (`requestMediaDataWhenReadyOnQueue` explicitly takes a
+caller-provided background queue). `PictureInPictureCoordinator` enqueues
+directly from `MPVGLView`'s own render queue rather than hopping to the
+main actor first, avoiding an extra thread transition on every video
+frame that would have bought nothing correctness-wise.
+
+**Design choices carried over intentionally:** both
+`MediaSessionManager` and `PictureInPictureCoordinator` are separate
+types from `PlayerViewModel`, communicating only through an `Action`
+enum + closures rather than holding a reference to `MPVCore` directly —
+matching mpv-android's own separation between `PlayerActivity`'s
+transport-control logic and its `initMediaSession()`/PiP-params setup,
+which only ever *signal* PlayerActivity rather than touching `MPVLib`
+themselves.
+
+**Lesson:** both features had a first-instinct implementation (render
+twice; set system volume directly; a sized GL enum for internalFormat;
+hide the PiP layer when not in PiP) that looked reasonable and matched
+a nearby, superficially-similar pattern elsewhere — and every one of
+them was wrong for a documented reason findable by checking current
+official sources (`render.h`, Apple DTS forum threads, a working
+reference implementation) rather than reasoning from the shape of
+similar-looking code. Consistent with entry 26's own lesson: the
+platform-specific *handler*/integration layer is where unverified
+analogy-based reasoning is most likely to silently produce something
+that compiles, looks plausible, and is subtly wrong.
+
+---
+
+## 28. Playlist support: mpv's own manual says its raw playlist property is "useless," and one playlist command still ships with no change notification
+
+**What was added:** playlist read/write support in `MPVPlayer.swift`
+(`loadFile`/`addToPlaylist`/`playlistNext`/`playlistPrev`/
+`playlistPlay`/`playlistRemove`/`playlistMove`/`playlistClear`/
+`playlistShuffle`/`playlistItems()`), wired into `PlayerViewModel`,
+Control Center next/previous-track commands, and a new `PlaylistSheet`
+UI. Two findings here are worth keeping in mind for any future code
+that touches mpv's playlist:
+
+**1. The `playlist` property cannot be read the way every other
+observed property in this codebase is read.** `input.rst` states this
+directly: "currently, the raw property value is useless." It's an
+`MPV_FORMAT_NODE`, and this codebase's property-event mapping
+(`MPVCore.swift`'s `mapEvent`) only decodes flag/int64/double/string —
+anything else falls through to `.none`. The fix used here isn't a new
+NODE decoder; it's the same pattern `trackList()` already established
+for `track-list` in this file: query the documented per-entry
+sub-properties individually (`playlist/N/filename`, `/title`,
+`/current`, `/playing`) using getters this codebase already has working.
+`playlist/N/playing` was used for the "is this the active entry" flag
+rather than `playlist/N/current` — IINA's own scripting API documents
+`isCurrent` as deprecated in favor of `isPlaying` for exactly this kind
+of check, and mpv's manual separately describes `playlist-current-pos`
+as only "vaguely useful," which reads as the same underlying
+distinction from the mpv side.
+
+**2. `playlist-move` fires no property-change notification at all**,
+confirmed via a still-open mpv issue (#7339) — every other
+playlist-mutating command in this codebase's wrapper (`playlist-remove`,
+`loadfile ... append`, `playlist-clear`, `playlist-shuffle`) does notify
+via `playlist-count`/`playlist-pos`, which is why `PlayerViewModel`
+mostly relies on observing those two properties rather than refreshing
+after every single call. `playlistMove`'s call site is the one
+exception: it refreshes explicitly, immediately after the command,
+because trusting the observer there would leave `playlist` silently
+stale after every reorder. (A related, older, already-fixed bug is also
+worth noting for anyone who finds outdated advice while researching
+this: `playlist-count` itself had unreliable change notifications on
+append/remove prior to mpv 0.17.0 per mpv issue #3267 — long since fixed
+upstream, and this project tracks mpv's master branch, but a search on
+this topic surfaces plenty of pre-fix discussion that no longer applies
+here.)
+
+**3. `append-play` is deprecated in favor of `append+play`** per
+`input.rst`'s own note (deprecated since mpv 0.42) — `loadFile`'s
+`MPVLoadMode` enum uses the current combinable-flag form as the
+default, keeping the deprecated single-token spelling only as a
+documented-but-unused case for reference.
+
+**4. `ContentUnavailableView` (used in an early draft of `PlaylistSheet`
+for the empty-playlist state) is iOS 17.0+ only** — caught before it
+shipped, same category of deployment-target mismatch as entry 26/27's
+`onChange(of:)` issue, just a different API. Replaced with a plain
+`VStack`-based empty state, consistent with this project's iOS 16.0
+deployment target (`project.yml`).
+
+**Lesson:** "the property doesn't decode the way I expected" and "the
+mutating command doesn't notify the way every other one does" are both
+the kind of behavior that's easy to miss by testing happy-path append/
+remove and assuming reorder works the same way — neither surfaces as a
+compile error or an obvious crash, only as UI that silently goes stale
+after one specific user action. Worth specifically checking, for any
+mpv command being wrapped for the first time, whether its own manual
+entry documents anything unusual about its change-notification
+behavior, rather than assuming all mutating commands in the same
+command family behave identically.
+
+---
+
+## 29. Decoder selection: a scary-looking mpv crash report turned out not to apply here, but only after actually reading which backend it named
+
+**What was added:** runtime hardware/software decoder switching
+(`MPVCore.DecoderOption`, `setDecoder(_:)`, `currentDecoder()`), a
+decoder picker section added to the existing `TrackSelectionSheet`, and
+`hwdec-current` property observation feeding
+`PlayerViewModel.currentDecoder`.
+
+**The first search result for "change hwdec at runtime" was a mpv
+crash report — worth recording exactly why it didn't block this
+implementation, rather than either ignoring it or over-reacting to it.**
+mpv issue #3788 documents a real, reproducible crash from cycling
+`hwdec` between `no` and `auto-copy` at runtime. Two details in that
+report matter more than its headline: it's from 2016 (mpv predates
+much of its current property-notification infrastructure — see entry
+28's note on `playlist-count`'s own since-fixed 2016-era bug for the
+same general vintage of issue), and it's specific to the **vdpau**
+backend (`Assertion '!ctx->hwdec_priv' failed` inside vdpau's own probe
+path) — a Linux/NVIDIA-only decode API this project's iOS build doesn't
+compile in at all (`buildscripts/scripts/mpv.sh` only enables `ios-gl`).
+Neither detail rules out some other VideoToolbox-specific instability by
+itself, but they do mean this specific report isn't evidence against
+this specific implementation.
+
+**What did settle it: checking whether an already-shipping player does
+this the simple way.** mpv-android's `pickDecoder()`
+(`MPVActivity.kt`) calls `MPVLib.setPropertyString("hwdec", ...)`
+directly, with no reload/restart/pause-and-resume dance beyond pausing
+its own picker dialog UI — and has done so in production for years for
+mediacodec, VideoToolbox's closest Android equivalent in terms of "GPU
+hardware decoder wired into an OpenGL-family render path." `setDecoder`
+here mirrors that directly: `setPropertyString`, not a `loadfile` reissue
+at the current position — with the reissue approach (mirroring mpv's
+own `reload.lua` companion script's "preserve position, reissue
+loadfile" pattern for a *different* problem, stalled network streams)
+noted in a comment as the fallback if real-device testing ever turns up
+a VideoToolbox-specific problem with the direct-set approach.
+
+**Property vs. option, caught before it shipped.** An early version of
+`setDecoder` called `setOptionString("hwdec", ...)` — the method this
+codebase already uses for `MPVConfiguration`'s pre-`initialize()` setup
+— rather than `setPropertyString`. These aren't interchangeable here:
+`setOptionString` maps to `mpv_set_option_string`, intended for
+before-initialize configuration; a *runtime* change to an
+already-initialized player (exactly mpv-android's `pickDecoder()`
+codepath) is a property set. mpv's own C API docs note that
+`mpv_set_property` can, since API version 1.23, also set some options —
+but that doesn't make the reverse true, and mirroring mpv-android's own
+call (`setPropertyString`) rather than reasoning about which API
+"should" work was the more reliable check here.
+
+**`hwdec-current` (not `hwdec`) is what's observed for UI state**,
+matching mpv-android's `hwdecActive` reading `hwdec-current` rather than
+echoing back whatever was last requested — `input.rst` documents that
+hardware decoding can silently fail over to software for an unsupported
+codec, so the requested value and the actually-active one can genuinely
+differ. `TrackSelectionSheet`'s decoder section checkmark deliberately
+compares against the last-*requested* option (a local `@State`, not
+`viewModel.currentDecoder`) for exactly this reason: showing a silent
+hardware-to-software fallback as if the user had tapped "Software"
+themselves would misrepresent what they actually chose. The actually-
+active decoder is surfaced separately, in the section's footer text,
+so the fallback is still visible without corrupting which button shows
+as selected.
+
+**Lesson:** a scary top search result is a reason to read closely, not
+a reason to either dismiss the whole approach or avoid it entirely —
+the actually relevant question was never "does changing hwdec at
+runtime ever crash mpv," it was "does changing *this* hwdec value, on
+*this* backend, in *this* codebase's calling pattern, crash mpv," and
+that narrower question had a much more directly useful answer sitting
+in a codebase (mpv-android) already doing the narrower thing in
+production.
+
+---
+
+## 30. Subtitle style: mpv's own option syntax documentation contradicts itself, and mpv's hex color byte order is backwards from the common iOS convention
+
+**What was added:** `MPVCore.subtitleDelay`/`subtitleScale`/
+`subtitlePosition`/`subtitleColorHex`/`subtitleBackgroundColorHex` in
+`MPVPlayer.swift`, and a new `SubtitleStyleSheet` UI (delay/size/
+position sliders, two `ColorPicker`s) reachable from
+`TrackSelectionSheet` once a subtitle track is selected.
+
+**`--sub-scale`'s own syntax line is internally inconsistent, and the
+inconsistency was only caught by cross-checking two other parts of the
+same manual page against each other.** `options.rst` writes this
+option's syntax as `--sub-scale=<0-100>`, which reads as "pass a value
+from 0 to 100." But the very next line of the same entry states the
+default is `1` — a genuine 0-100 range's default would sit somewhere
+near the middle of that range, not at its extreme low end. Checking
+mpv's own shipped `etc/input.conf` settled it: the default keybindings
+step this option by `add sub-scale 0.1` / `add sub-scale -0.1` per
+keypress. Against a real 0-100 range, a step of 0.1 would be an
+imperceptible 0.1% nudge; against a ~1.0-centered multiplier, 0.1 is
+exactly the "adjust font size by roughly 10%" behavior mpv's own manual
+describes elsewhere for that keybinding. `subtitleScale`'s doc comment
+records this reasoning explicitly and recommends a ~0.1...3.0 UI range
+instead of trusting the `<0-100>` placeholder. (`--sub-pos`'s `<0-150>`
+syntax was checked the same way and found to be internally consistent —
+its stated default of 100 sits inside that range normally — so it
+didn't need the same correction; recorded here mainly so a future
+reader doesn't assume every mpv option's syntax placeholder needs this
+level of suspicion, only that checking costs little and this specific
+one failed the check.)
+
+**mpv's hex color format puts the alpha byte first
+(`#AARRGGBB`), confirmed directly against `options.rst`'s own worked
+example** (`--sub-color='#C0808080'` for 50% gray at 75% alpha — `C0`
+leads). Several general-purpose iOS "hex string to UIColor" snippets
+(surfaced while researching the conversion side of this feature) assume
+the opposite, more common `#RRGGBBAA` (alpha-last) convention. Getting
+this backwards wouldn't have caused a crash or a compile error — it
+would have silently swapped the red channel and the alpha channel for
+any color with partial transparency, which is exactly the kind of bug
+that looks fine in a quick opaque-color test and only shows up once
+someone tries a semi-transparent subtitle background. Both
+`MPVCore.subtitleColorHex`'s doc comment and `SubtitleStyleSheet`'s
+`Color`-hex helpers call out the byte order explicitly so a future hex
+color helper isn't copy-pasted in from a generic snippet without
+adjusting it.
+
+**`Color.cgColor` is nil for dynamic/system colors, confirmed before
+relying on it** — a constant color built from literal RGB components
+(`Color(.sRGB, red:...)`) has a working `cgColor`, but `Color.blue` and
+anything returned by the system's own `ColorPicker` UI can be a dynamic
+color, for which `cgColor` reliably returns `nil`. `SubtitleStyleSheet`
+bridges through `UIColor(self)` and `getRed(green:blue:alpha:)` instead,
+which works unconditionally for both cases — chosen specifically
+because `ColorPicker`'s selection can hand back either kind of color,
+not just the constant kind a quick hex-conversion snippet would have
+been tested against.
+
+**Non-`@Published` properties need a manual `objectWillChange.send()`
+to drive SwiftUI updates.** `PlayerViewModel`'s subtitle-style
+properties are computed vars forwarding straight to `MPVCore` (there's
+no mpv property-change event observed for any of them, unlike
+time-pos/duration/etc.), so plain `get { core.x } set { core.x = $0 }`
+would compile fine but never cause a bound `Slider`/`ColorPicker` to
+redraw after a write — `@Published`'s automatic notification only fires
+for its own wrapped property being reassigned, and nothing here
+reassigns one. Each setter calls `objectWillChange.send()` explicitly
+before writing through, which is Combine's documented pattern for
+exactly this situation (true storage living outside any `@Published`
+wrapper the object itself owns).
+
+**Lesson:** the same manual page can be internally contradictory
+(syntax placeholder vs. stated default vs. shipped keybindings all
+disagreeing about `sub-scale`'s real range) — when something is
+suspicious, checking a second and third statement from the *same*
+source that bears on the same fact is often enough to resolve it
+without needing an external source at all. Separately, "the two most
+similar-looking pieces of prior art disagree with each other" (mpv's
+alpha-first hex vs. the alpha-last convention several iOS snippets use)
+is exactly the situation where trusting either one without checking the
+authoritative source for the actual property being written to is
+riskiest — the code compiles and looks reasonable either way, and only
+mpv's own manual says which one is actually correct for this specific
+option.
+
+---
+
+## 31. Video scale/interpolation: a documented "silently disabled" trap that mpv-android's own preference UI was clearly built to work around
+
+**What was added:** full-parity video scale/interpolation controls per
+this session's own scope decision — `MPVCore.videoScale`/`chromaScale`/
+`downscale`/`temporalScale`/`scaleParam1`/`scaleParam2`,
+`setInterpolationEnabled(_:)`, `setAspectMode(_:)`, `videoZoom`,
+`videoRotation`, `panscan`, `videoUnscaled` — plus a new
+`VideoSettingsSheet` UI.
+
+**`--interpolation`'s own manual entry contains an explicit warning that
+was the entire reason this feature needed cross-checking against
+mpv-android's implementation, not just its option list.** `options.rst`
+states: enabling `--interpolation` while `--video-sync` is not one of
+the `display-*` modes results in interpolation being "silently
+disabled." No error, no refused property write — the toggle would
+simply appear to do nothing. Reading mpv-android's
+`InterpolationDialogPreference.kt` showed this isn't a theoretical
+concern this project would be the first to hit: that class has explicit
+`ensureSyncMode()`/`ensureInterpolationToggled()` methods whose entire
+purpose is keeping the interpolation switch and the video-sync mode
+consistent with each other in both directions — turning interpolation
+on forces video-sync to a `display-*` mode if it isn't already one, and
+moving video-sync away from `display-*` turns interpolation back off.
+`MPVCore.setInterpolationEnabled(_:)` mirrors this pairing directly
+rather than only exposing the raw `interpolation` property, specifically
+because exposing it raw would reproduce the exact "toggle does nothing,
+no error" trap the option's own documentation warns about.
+
+**One part of this couldn't be verified without a real device, and the
+code says so rather than asserting it works.** The `display-*` modes
+also require, per the same manual page, "a vsync blocked presentation
+mode" (`--opengl-swapinterval=1` for the GL backend this project uses).
+This project's actual render loop (`MPVGLView`'s render-update-callback-
+driven `drawIfNeeded()`) has no explicit swap-interval call and no
+`CADisplayLink` — `EAGLContext.presentRenderbuffer` is vsync-locked by
+iOS regardless of app-level swap-interval configuration, which *should*
+satisfy the requirement, but this hasn't been confirmed by watching
+actual interpolation behavior on a device, since this environment can't
+build or run the project. `setInterpolationEnabled`'s doc comment says
+this plainly instead of implying the feature is fully verified.
+
+**`--video-zoom` is a log2 factor, not a linear multiplier or
+percentage** — `options.rst` states this directly (0 = unscaled, 1 =
+double size, -2 = one fourth size). `VideoSettingsSheet`'s zoom slider
+operates on the raw log2 value directly (a symmetric range around 0 is
+the natural UI shape for a log-scale control) while its label applies
+`pow(2, value)` to show a human-readable "2.0x"-style readout — binding
+a slider directly to this property and labeling the raw value would
+have shown a confusing "-2...2"-range number with no obvious
+relationship to visible zoom level.
+
+**`--tscale` is a separate, smaller filter namespace from `--scale`/
+`--cscale`/`--dscale`, confirmed by options.rst stating outright that
+only "separable convolution filters" are valid `--tscale` choices.**
+`VideoSettingsSheet` keeps two explicitly separate filter-name arrays
+(`spatialScaleFilters` vs. `temporalScaleFilters`) rather than one
+shared list threaded through both scale-family and tscale pickers —
+merging them would have let the UI offer filter names for `--tscale`
+that mpv would reject or ignore.
+
+**What wasn't fully resolved:** neither `--scale=help` nor
+`--tscale=help` could be run against a real mpv binary from this
+environment, so both filter-name arrays are the subset `options.rst`
+names explicitly in prose, not a verified-complete list. Flagged in
+both the doc comments and in-code as a known gap, rather than presenting
+a plausible-looking but unverified "complete" list as authoritative.
+
+**Lesson:** an option's own manual entry stating a specific, named
+failure mode ("silently disabled" under condition X) is a strong signal
+to check how a mature, already-shipping implementation of the same
+feature handles that exact condition, rather than implementing the
+option in isolation and discovering the failure mode via user reports
+later. Separately: verifying via documentation and cross-referencing an
+existing implementation reaches a real ceiling at some point (the
+GL-swap-interval question here) — the honest response is recording
+exactly what wasn't verified and why, not extrapolating confidence from
+how well-verified the rest of the feature is.
+
+---
+
+## 32. A real compile error shipped in earlier work: `@objc`/`#selector` on plain Swift classes, found while wiring up persisted playback position
+
+**What was added:** playback-position persistence
+(`MPVCore.writeWatchLaterConfig()`/`deleteWatchLaterConfig()`, built on
+mpv's own built-in watch-later mechanism rather than a custom
+save/restore implementation — matching mpv-android's own choice to lean
+on mpv's built-in system, and its `savePosition()`'s `eof-reached` check
+to avoid resuming a just-finished file at its own ending), wired into
+`PlayerViewModel.stop()` and an app-backgrounding observer.
+
+**While adding that backgrounding observer, a genuine compile-breaking
+mistake was found in code from an earlier session — not new code, code
+already presented as finished.** `MediaSessionManager` (entry 27) uses
+`NotificationCenter.default.addObserver(self, selector:
+#selector(handleInterruption(_:)), ...)` for its interruption/route-
+change handling. `@objc`-exposed methods and `#selector` both require
+the containing type to inherit from `NSObject` — `MediaSessionManager`
+is declared `public final class MediaSessionManager` with no such
+inheritance, matching this codebase's general preference for plain
+Swift coordinator types (see `PictureInPictureCoordinator`'s docs on
+the same point). This would not have been a subtle runtime bug; it's a
+straightforward compile error, sitting in code that had already been
+written, reasoned about at length, and presented as complete in a prior
+turn.
+
+**The fix surfaced a second, non-obvious issue**: switching to the
+block-based `addObserver(forName:object:queue:using:)` API (which needs
+no `@objc`/`NSObject`) doesn't fully resolve things on its own, because
+both `MediaSessionManager` and `PlayerViewModel` are `@MainActor`-
+isolated types. `queue: .main` guarantees the closure runs on the main
+thread at runtime, but a plain closure's *static* isolation is still
+`nonisolated` to the type system — referencing `self` from inside it
+still triggers a Swift concurrency error, confirmed against a matching
+Apple Developer Forums report of the exact same "`@MainActor` type +
+`addObserver`/`addTarget` closure" combination failing for another
+developer. `MainActor.assumeIsolated { }` around the closure body is
+the documented resolution for exactly this situation (asserting at
+runtime what `queue: .main` already guarantees, without making every
+call site `async`) — applied to every affected closure:
+`MediaSessionManager`'s two `NotificationCenter` observers, all eight of
+its `MPRemoteCommand.addTarget` handlers, and `PlayerViewModel`'s new
+backgrounding observer. `PictureInPictureCoordinator`'s
+`AVPictureInPictureControllerDelegate`/
+`AVPictureInPictureSampleBufferPlaybackDelegate` conformances were
+audited for the same risk and left as-is with a comment explaining why
+(Apple's own system-framework delegate protocols are expected to be
+annotated for exactly this `@MainActor`-conforming-type case) and what
+to do if a real build disagrees — this project has no way to verify by
+actually compiling, so the honest record is "audited and reasoned
+through, not confirmed by a build."
+
+**Lesson, stated plainly:** presenting code as finished in an earlier
+turn is not the same as it being correct, and a mistake doesn't become
+harder to find just because it shipped a while ago — the same
+disciplined checking applied to brand-new code needs to extend to
+re-examining prior work when a closely related pattern comes up again
+(here, writing a *second* NotificationCenter observer was what
+prompted noticing the first one was broken). A `grep` across the whole
+project for the broken pattern (`@objc`/`#selector`) after fixing the
+two known instances confirmed no third occurrence was hiding elsewhere
+— worth doing that sweep rather than assuming the two found instances
+were the only ones, once a pattern is known to be wrong.
+
+---
+
+## 33. Stats overlay: an initial "this property doesn't exist" conclusion was wrong, caught by reading mpv's C source instead of stopping at input.rst
+
+**What was added:** `MPVCore.PlaybackStats`/`currentStats()` (codec,
+resolution, fps, hwdec, bitrate, A/V sync, dropped frames, cache state)
+and a `StatsOverlay` SwiftUI view polling it once per second while
+visible — equivalent in spirit to mpv-android's `updateStats()`, though
+mpv-android's own version only ever surfaces FPS; this implementation's
+scope is closer to mpv's own `stats.lua` OSD script.
+
+**A wrong conclusion, caught before it shipped by going one layer
+deeper than the usual source.** An initial `grep` across `input.rst`
+for "video-codec"/"audio-codec" turned up nothing, leading to a first
+draft that assumed these properties simply don't exist and worked
+around it by manually cross-referencing `track-list`'s entries against
+the currently-selected `vid`/`aid` track ids instead. That conclusion
+was wrong. Checking mpv's own C source (`player/command.c`) — a step
+this project doesn't normally need, since `input.rst` is usually
+authoritative and sufficient — turned up
+`M_PROPERTY_ALIAS("video-codec", "current-tracks/video/codec-desc")`
+and its `audio-codec` counterpart: both properties are real, just
+implemented as property *aliases* rather than being independently
+documented as top-level properties in the section of `input.rst` the
+first search covered. The simpler, correct implementation
+(`getPropertyString("video-codec")` directly) replaced the manual
+track-list cross-referencing entirely once this was found.
+
+**A second, more consequential mistake from the same round of
+guessing: assuming `video-bitrate` was a DOUBLE property.** Nothing
+about the property's docstring states its type either way, and "a
+bitrate" reads intuitively as a fractional value. mpv's own source
+settled it unambiguously: `mp_property_packet_bitrate` computes an
+internal `double` but returns it via `m_property_int64_ro`, i.e. the
+value is rounded and exposed as INT64 at the client-API boundary. This
+would not have been a cosmetic bug — mpv's client API refuses a
+property read requested in the wrong format rather than silently
+converting, so calling `getPropertyDouble` (this codebase's existing,
+correctly-typed helper for genuinely double-typed properties) against
+an INT64 property returns `nil` unconditionally. Every bitrate reading
+in the stats overlay would have silently shown as absent, with nothing
+in the UI or logs pointing at why. Checked and fixed to
+`getPropertyInt`, with the bits-per-second-to-kilobits conversion moved
+to happen in `Double` *after* the correctly-typed read rather than
+during it.
+
+**One property's type could not be fully settled and is flagged as
+such rather than guessed with false confidence.** `container-fps` is
+implemented internally as a C `float` (`CONF_TYPE_FLOAT`), a third
+distinct type from both `int64` and `double` at the C level — but mpv's
+client API only defines `MPV_FORMAT_INT64`/`MPV_FORMAT_DOUBLE` for
+numeric properties (no float format exists at that boundary), so
+`float`s are necessarily promoted to `double` when read from client
+code. `getPropertyDouble` is used on that reasoning, documented
+in-code as reasoning rather than a confirmed on-device result — this
+environment has no way to compile and run the project to check
+directly, and a wrong guess here fails safe (a `nil` reading, not a
+crash or bad value), which is why this one specific property was
+flagged rather than silently assumed correct alongside the others that
+were fully verified.
+
+**Lesson:** "grep the manual and get zero results" is evidence the
+manual doesn't document something *at that exact name, in that exact
+section* — it is not equivalent to "this doesn't exist," and property
+aliases are exactly the gap between those two claims. When a
+conclusion drawn from documentation search leads to visibly more
+complex code than expected (here: manually cross-referencing
+`track-list` against selected track ids, instead of reading one
+property), that complexity gap is itself worth treating as a signal to
+check a level deeper — in this case, the actual property-registration
+table in mpv's own source — before accepting the conclusion.
+
+---
+
+## 34. Orientation lock: SwiftUI has no hook for this at all, and the API that does exist is documented-broken on the exact iOS version this project targets
+
+**What was added:** `OrientationLockController` (auto/landscape/
+portrait/unlocked modes, matching mpv-android's `cycleOrientation()`/
+`updateOrientation()`), a new minimal `AppDelegate` wired in via
+`@UIApplicationDelegateAdaptor`, and a tap-cycles/long-press-picks
+orientation control in `MPVPlayerView`'s top bar.
+
+**This is the one feature in this whole project that required adding
+new app-lifecycle infrastructure (an `AppDelegate`) specifically
+because SwiftUI's own `App` protocol has no equivalent hook at all** —
+confirmed across every source consulted on this topic, not just one:
+`application(_:supportedInterfaceOrientationsFor:)` is only ever called
+on a `UIApplicationDelegate`, full stop. A separate source
+(a Medium writeup specifically about SwiftUI orientation locking)
+documented having tried the obvious SwiftUI-native-feeling workarounds
+first — `windowScene?.effectiveGeometry.setValue(true, forKey:
+"isInterfaceOrientationLocked")` and equivalent KVC calls on
+`rootViewController` — and reported both **crash** with "this class is
+not key value coding-compliant for the key ...". That's a materially
+different situation from most of this project's other iOS-API
+research, where the question was "which of several working approaches
+is correct" — here, most of the approaches that don't involve adding an
+`AppDelegate` don't work at all.
+
+**The API that does exist is separately reported broken on iOS 16
+specifically, in an Apple Developer Forums thread from an Apple
+context** (not a random blog): `application:supportedInterfaceOrientationsForWindow:`
+"does not lock the orientation" on iOS 16, changing orientation before
+asking the delegate rather than after, backwards from its own
+documented sequencing — with multiple independent forum replies
+confirming the same symptom, not one isolated report. The **working**
+combination synthesized from several forum threads describing the same
+migration is: `UIWindowScene.requestGeometryUpdate(.iOS(interfaceOrientations:))`
+(the iOS 16+ replacement for directly setting device orientation) paired
+with `UIViewController.setNeedsUpdateOfSupportedInterfaceOrientations()`
+on the current root view controller, so the delegate's
+`supportedInterfaceOrientationsFor:` gets explicitly re-queried rather
+than relying on whatever the (reportedly broken) automatic re-check
+does. `OrientationLockController.applyChange()` calls both, in that
+order, specifically because no single source described only one of
+them as sufficient.
+
+**Design choices carried over from mpv-android, and one deliberately
+not:** the auto-mode aspect-ratio threshold (treating near-square video
+as "let the system rotate freely" rather than force-locking) mirrors
+mpv-android's own `ASPECT_RATIO_MIN`-gated behavior in
+`updateOrientation()`, though the specific numeric threshold (1.2) is
+this project's own choice, not a value read out of mpv-android's
+source — recorded as such rather than implied to be a ported constant.
+`cycleOrientation()` mirrors mpv-android's exactly (a two-state
+landscape/portrait toggle, not a cycle through all four `Mode` cases) —
+mpv-android's own cycle button never reaches its `auto`/unspecified
+state, that's only reachable from its separate settings screen, and
+this project's tap-cycles/long-press-for-full-picker control preserves
+that same split (tap = the two-state toggle, long-press = all four
+modes) rather than inventing a different interaction model.
+
+**Lesson:** when *every* source consulted on a topic converges on "the
+direct/obvious way doesn't exist for this UI framework" and "the
+documented replacement API is itself reported broken on the exact OS
+version in question," that's a meaningfully different research
+situation from the usual "which approach is correct" question this
+project has faced for most other features — it calls for synthesizing
+a specific combination from multiple problem-reports and their
+replies (not just one canonical doc page), and for being explicit in
+the resulting code and commit history about which parts of that
+combination came from which specific report, since no single source
+described the whole working solution end to end.
+
+---
+
 ## General patterns worth carrying forward
 
 A few things that recurred across multiple entries above, worth stating

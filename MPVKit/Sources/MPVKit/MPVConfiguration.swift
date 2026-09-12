@@ -27,6 +27,25 @@ public struct MPVConfiguration {
     /// Screenshot output directory.
     public var screenshotDirectory: URL?
 
+    /// Directory mpv uses for its "watch later" resume-position files
+    /// (`--watch-later-dir`). If nil, mpv falls back to its own default
+    /// location under the local state directory — worth setting
+    /// explicitly on iOS to guarantee it lands somewhere inside the
+    /// app's own sandbox rather than relying on mpv's non-iOS-aware
+    /// default path resolution.
+    public var watchLaterDirectory: URL?
+
+    /// Whether to automatically restore playback position when a
+    /// previously-watched file is reopened (`--resume-playback`).
+    /// Equivalent to mpv-android's `shouldSavePosition`
+    /// (`save_position` preference) gating whether `savePosition()` ever
+    /// calls `write-watch-later-config` in the first place — mirrored
+    /// here as a single option covering both the read side
+    /// (`resume-playback`) and, in `PlayerViewModel.saveWatchLaterPosition()`,
+    /// the write side, so a user who has this off never has stale
+    /// watch-later files written OR read.
+    public var resumePlaybackEnabled: Bool = true
+
     public init() {}
 
     /// Applies this configuration to a freshly-created (but not yet
@@ -69,6 +88,23 @@ public struct MPVConfiguration {
         if let dir = screenshotDirectory {
             core.setOptionString("screenshot-directory", dir.path)
         }
+        if let dir = watchLaterDirectory {
+            core.setOptionString("watch-later-dir", dir.path)
+        }
+        core.setOptionString("resume-playback", resumePlaybackEnabled ? "yes" : "no")
+        // NOT setting --save-position-on-quit: that option's own
+        // semantics are tied to mpv's own "quit" command / built-in
+        // quit keybinding, a concept that doesn't map cleanly onto an
+        // iOS app's own lifecycle (backgrounding, view dismissal, the
+        // app being suspended by the system are all meaningfully
+        // different from mpv's notion of quitting, and none of them
+        // guarantee mpv's own quit path runs at all). Position saving is
+        // instead driven explicitly from Swift — see
+        // PlayerViewModel.saveWatchLaterPosition(), called from
+        // `stop()` and from the app-backgrounding notification — mirroring
+        // mpv-android's own choice to call `write-watch-later-config`
+        // directly from `savePosition()` rather than relying on
+        // `--save-position-on-quit`.
 
         // Subtitle rendering defaults matching mpv-android's baseline
         // (ASS-styled subs, embedded fonts allowed).

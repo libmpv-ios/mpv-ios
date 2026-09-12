@@ -7,6 +7,7 @@ import MPVKit
 /// of an XML layout + findViewById.
 struct MPVVideoView: UIViewRepresentable {
     let core: MPVCore
+    let pipCoordinator: PictureInPictureCoordinator
 
     func makeUIView(context: Context) -> MPVGLView {
         guard let view = MPVGLView(core: core) else {
@@ -21,6 +22,7 @@ struct MPVVideoView: UIViewRepresentable {
             // will show an error state if render context creation fails.
             print("MPVVideoView: attachRenderContext failed: \(error)")
         }
+        pipCoordinator.configure(with: view)
         return view
     }
 

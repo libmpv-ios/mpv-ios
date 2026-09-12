@@ -22,6 +22,16 @@ behind it, rather than repeating that investigation here.
 
 ## [Unreleased]
 
+### Added
+
+- Touch gesture support in `mpv-ios-player`, ported from mpv-android's
+  `TouchGestures.kt`: swipe-to-seek, swipe-to-adjust-volume,
+  swipe-to-adjust-brightness, and tap gestures (left/right fixed-seek,
+  center play/pause), plus the tap-to-toggle-controls fallback for plain
+  taps that don't trigger a gesture. New reusable `MPVTouchGestures`
+  headless gesture recognizer in `MPVKit` (no UIKit/SwiftUI dependency),
+  wired into `MPVPlayerView`/`PlayerViewModel`.
+
 ## [v0.1.0] - 2026-08-10
 
 ### Added

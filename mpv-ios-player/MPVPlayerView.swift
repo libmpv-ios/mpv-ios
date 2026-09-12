@@ -1,5 +1,6 @@
 import SwiftUI
 import MPVKit
+import AVKit
 
 /// Full player screen: video surface + overlay controls. Equivalent to
 /// mpv-android's PlayerActivity (activity_player.xml layout + the
@@ -9,14 +10,22 @@ public struct MPVPlayerView: View {
     @StateObject private var viewModel = PlayerViewModel()
 
     private let url: URL
+    private let additionalPlaylistURLs: [URL]
     private let onDismiss: (() -> Void)?
 
     @State private var controlsVisible = true
     @State private var hideControlsTask: Task<Void, Never>?
     @State private var showTrackSheet = false
+    @State private var showPlaylistSheet = false
+    @State private var showVideoSettingsSheet = false
+    @State private var showStatsOverlay = false
+    @ObservedObject private var orientationLock = OrientationLockController.shared
+    @State private var dragInProgress = false
+    @State private var mightWantToToggleControls = true
 
-    public init(url: URL, onDismiss: (() -> Void)? = nil) {
+    public init(url: URL, additionalPlaylistURLs: [URL] = [], onDismiss: (() -> Void)? = nil) {
         self.url = url
+        self.additionalPlaylistURLs = additionalPlaylistURLs
         self.onDismiss = onDismiss
     }
 
@@ -24,14 +33,88 @@ public struct MPVPlayerView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            MPVVideoView(core: viewModel.core)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        controlsVisible.toggle()
+            GeometryReader { geometry in
+                MPVVideoView(core: viewModel.core, pipCoordinator: viewModel.pipCoordinator)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onAppear {
+                        viewModel.onGestureSurfaceResized(
+                            width: geometry.size.width,
+                            height: geometry.size.height
+                        )
                     }
-                    scheduleAutoHide()
-                }
+                    .onChange(of: geometry.size) { newSize in
+                        viewModel.onGestureSurfaceResized(
+                            width: newSize.width,
+                            height: newSize.height
+                        )
+                    }
+                    .gesture(
+                        // minimumDistance: 0 so this also fires on a plain
+                        // tap-down/tap-up with no movement — MPVTouchGestures
+                        // itself decides whether that sequence counts as a
+                        // tap gesture (its own processTap logic), the same
+                        // way mpv-android's dispatchTouchEvent feeds every
+                        // touch phase through TouchGestures regardless of
+                        // whether the user ends up moving their finger.
+                        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                            .onChanged { value in
+                                if !dragInProgress {
+                                    dragInProgress = true
+                                    viewModel.resetGestureCancelFlag()
+                                    _ = viewModel.touchGestures.touchDown(at: value.startLocation)
+                                    // Matches mpv-android's dispatchTouchEvent:
+                                    // set true unconditionally on touch-down;
+                                    // PlayerViewModel flips this false itself
+                                    // once a real Control gesture starts
+                                    // (mirroring onPropertyChange's Init case
+                                    // setting mightWantToToggleControls = false
+                                    // in the Kotlin original).
+                                    mightWantToToggleControls = true
+                                } else {
+                                    if viewModel.touchGestures.touchMoved(at: value.location) {
+                                        scheduleAutoHide()
+                                    }
+                                    if viewModel.gestureDidCancelTapToggle {
+                                        mightWantToToggleControls = false
+                                    }
+                                }
+                            }
+                            .onEnded { value in
+                                let gestureHandled = viewModel.touchGestures.touchUp(at: value.location)
+                                dragInProgress = false
+                                if gestureHandled {
+                                    scheduleAutoHide()
+                                }
+                                if viewModel.gestureDidCancelTapToggle {
+                                    mightWantToToggleControls = false
+                                }
+                                if mightWantToToggleControls {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        controlsVisible.toggle()
+                                    }
+                                    scheduleAutoHide()
+                                }
+                            }
+                    )
+            }
+
+            // Non-zero size, invisible during normal playback — see
+            // PictureInPictureLayerView's doc comment for why this
+            // cannot be `.hidden` or zero-frame without silently
+            // breaking PiP.
+            PictureInPictureLayerView(coordinator: viewModel.pipCoordinator)
+                .allowsHitTesting(false)
+                .opacity(0)
+
+            if let feedback = viewModel.gestureFeedbackText, !feedback.isEmpty {
+                Text(feedback)
+                    .font(.headline.monospacedDigit())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+            }
 
             if viewModel.isBuffering {
                 ProgressView()
@@ -48,19 +131,42 @@ public struct MPVPlayerView: View {
             if let errorMessage = viewModel.errorMessage {
                 errorBanner(errorMessage)
             }
+
+            if showStatsOverlay {
+                VStack {
+                    HStack {
+                        StatsOverlay(viewModel: viewModel)
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .padding(.top, 60)
+                .padding(.leading, 12)
+                .allowsHitTesting(false)
+            }
         }
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
         .onAppear {
             viewModel.start()
             viewModel.loadFile(url.isFileURL ? url.path : url.absoluteString)
+            for extraURL in additionalPlaylistURLs {
+                viewModel.addToPlaylist(extraURL.isFileURL ? extraURL.path : extraURL.absoluteString)
+            }
             scheduleAutoHide()
+            viewModel.pipCoordinator.setUpControllerIfNeeded()
         }
         .onDisappear {
             viewModel.stop()
         }
         .sheet(isPresented: $showTrackSheet) {
             TrackSelectionSheet(viewModel: viewModel)
+        }
+        .sheet(isPresented: $showPlaylistSheet) {
+            PlaylistSheet(viewModel: viewModel)
+        }
+        .sheet(isPresented: $showVideoSettingsSheet) {
+            VideoSettingsSheet(viewModel: viewModel)
         }
     }
 
@@ -101,9 +207,67 @@ public struct MPVPlayerView: View {
             Button {
                 showTrackSheet = true
             } label: {
-                Image(systemName: "list.bullet")
+                // "waveform" (not "list.bullet") specifically to stay
+                // visually distinct from the playlist button below —
+                // both used "list.bullet" in an earlier draft, which
+                // would have made the two buttons indistinguishable at a
+                // glance.
+                Image(systemName: "waveform")
                     .font(.title3)
                     .foregroundStyle(.white)
+            }
+
+            if viewModel.playlist.count > 1 {
+                Button {
+                    showPlaylistSheet = true
+                } label: {
+                    Image(systemName: "list.bullet")
+                        .font(.title3)
+                        .foregroundStyle(.white)
+                }
+            }
+
+            Button {
+                showVideoSettingsSheet = true
+            } label: {
+                Image(systemName: "camera.aperture")
+                    .font(.title3)
+                    .foregroundStyle(.white)
+            }
+
+            Button {
+                showStatsOverlay.toggle()
+            } label: {
+                Image(systemName: "chart.bar.doc.horizontal")
+                    .font(.title3)
+                    .foregroundStyle(showStatsOverlay ? .yellow : .white)
+            }
+
+            Menu {
+                ForEach(OrientationLockController.Mode.allCases, id: \.self) { mode in
+                    Button {
+                        orientationLock.setMode(mode)
+                    } label: {
+                        if orientationLock.mode == mode {
+                            Label(mode.rawValue.capitalized, systemImage: "checkmark")
+                        } else {
+                            Text(mode.rawValue.capitalized)
+                        }
+                    }
+                }
+            } label: {
+                // Tap cycles landscape<->portrait directly (matching
+                // mpv-android's cycleOrientation() button behavior);
+                // long-press/tap-and-hold on a Menu shows the full mode
+                // list (auto/landscape/portrait/unlocked), matching
+                // mpv-android's own pattern of a tap-cycles /
+                // long-press-opens-picker pair used elsewhere for
+                // decoder selection.
+                Image(systemName: orientationIconName)
+                    .font(.title3)
+                    .foregroundStyle(.white)
+            } primaryAction: {
+                orientationLock.cycleOrientation()
             }
 
             Button {
@@ -112,6 +276,20 @@ public struct MPVPlayerView: View {
                 Image(systemName: viewModel.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
                     .font(.title3)
                     .foregroundStyle(.white)
+            }
+
+            if AVPictureInPictureController.isPictureInPictureSupported() {
+                Button {
+                    if viewModel.pipCoordinator.isPictureInPictureActive {
+                        viewModel.pipCoordinator.stopPictureInPicture()
+                    } else {
+                        viewModel.pipCoordinator.startPictureInPicture()
+                    }
+                } label: {
+                    Image(systemName: "pip.enter")
+                        .font(.title3)
+                        .foregroundStyle(.white)
+                }
             }
         }
         .padding()
@@ -177,6 +355,15 @@ public struct MPVPlayerView: View {
             .padding(.bottom, 8)
         }
         .padding()
+    }
+
+    private var orientationIconName: String {
+        switch orientationLock.mode {
+        case .auto: return "arrow.triangle.2.circlepath"
+        case .landscape: return "rectangle.landscape.rotate"
+        case .portrait: return "rectangle.portrait.rotate"
+        case .unlocked: return "lock.open.rotation"
+        }
     }
 
     private func errorBanner(_ message: String) -> some View {

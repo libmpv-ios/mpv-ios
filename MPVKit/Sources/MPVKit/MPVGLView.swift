@@ -1,5 +1,6 @@
 import UIKit
 import OpenGLES
+import CoreMedia
 import CMPV
 
 /// Renders mpv video output using OpenGL ES + the mpv render API.
@@ -42,6 +43,24 @@ public final class MPVGLView: UIView {
     private var drawableWidth: GLint = 0
     private var drawableHeight: GLint = 0
 
+    /// Set to non-nil only while Picture in Picture is active — see
+    /// `enablePictureInPicture()`/`disablePictureInPicture()`. `nil` by
+    /// default so the extra per-frame blit work (see `drawIfNeeded()`)
+    /// never runs unless PiP has actually been requested, keeping the
+    /// existing screen-only render path's cost completely unchanged for
+    /// the common case.
+    private var pipRenderer: PictureInPictureRenderer?
+
+    /// Called with a freshly blitted PiP frame whenever one is produced
+    /// (only while `pipRenderer` is set). The owner (PlayerViewModel /
+    /// PiP coordinator) is expected to enqueue this onto its own
+    /// `AVSampleBufferDisplayLayer` — `MPVGLView` itself has no reference
+    /// to AVKit/AVSampleBufferDisplayLayer, keeping this view's own
+    /// responsibility limited to "produce frames," not "know what PiP UI
+    /// exists," the same separation `MPVCore`/`MPVGLView` already keep
+    /// from the SwiftUI view layer elsewhere in this file.
+    public var onPictureInPictureFrame: ((CMSampleBuffer) -> Void)?
+
     /// Guards against redrawing after teardown started, and against
     /// concurrent render calls (mpv_render_context_render is not
     /// re-entrant for a given context — see render.h's Threading section).
@@ -76,6 +95,41 @@ public final class MPVGLView: UIView {
 
     deinit {
         teardown()
+    }
+
+    // MARK: - Picture in Picture
+    //
+    // Additive on top of the existing screen render path: does not
+    // change what `drawIfNeeded()` sends to mpv or how the screen
+    // presents (see that method's PiP branch, added at the very end
+    // after the existing `presentRenderbuffer`/`report_swap` calls).
+    // Enabling/disabling this only turns the extra blit-and-callback
+    // step on or off; the screen output is identical either way.
+
+    /// Starts producing PiP frames. Must be called with `eaglContext`
+    /// reachable (this hops onto `renderQueue` itself, matching every
+    /// other GL-touching entry point in this class), and only after
+    /// `attachRenderContext()` has already succeeded, since PiP frames
+    /// are blitted from the same `colorRenderbuffer` the screen render
+    /// path allocates in `rebuildFramebufferIfNeeded()`.
+    public func enablePictureInPicture() {
+        renderQueue.async { [weak self] in
+            guard let self, !self.isDestroyed else { return }
+            let renderer = PictureInPictureRenderer()
+            EAGLContext.setCurrent(self.eaglContext)
+            guard renderer.setUp(eaglContext: self.eaglContext) else { return }
+            self.pipRenderer = renderer
+        }
+    }
+
+    /// Stops producing PiP frames and releases the PiP renderer's GL
+    /// resources. Safe to call even if PiP was never enabled.
+    public func disablePictureInPicture() {
+        renderQueue.async { [weak self] in
+            guard let self else { return }
+            self.pipRenderer?.tearDown()
+            self.pipRenderer = nil
+        }
     }
 
     // MARK: - Setup
@@ -192,6 +246,16 @@ public final class MPVGLView: UIView {
             isDestroyed = true
 
             EAGLContext.setCurrent(eaglContext)
+
+            // Torn down before the render context itself: pipRenderer's
+            // texture cache holds GL objects created against this same
+            // eaglContext, and must release them (tearDown() flushes the
+            // texture cache) while that context is still current and
+            // valid — the same ordering constraint documented below for
+            // deleteFramebuffer()/mpv_render_context_free().
+            pipRenderer?.tearDown()
+            pipRenderer = nil
+            onPictureInPictureFrame = nil
 
             if let ctx = renderContext {
                 mpv_render_context_free(ctx)
@@ -336,6 +400,20 @@ public final class MPVGLView: UIView {
         eaglContext.presentRenderbuffer(Int(GL_RENDERBUFFER))
 
         mpv_render_context_report_swap(ctx)
+
+        // PiP branch: reads back the frame just rendered above via a
+        // GPU-side blit (no second mpv render — see
+        // PictureInPictureRenderer's doc comment for why that matters).
+        // `colorRenderbuffer` still holds this frame's contents at this
+        // point: `presentRenderbuffer` schedules a display swap, it does
+        // not itself clear or invalidate the renderbuffer's contents.
+        if let pipRenderer, let sampleBuffer = pipRenderer.makeSampleBuffer(
+            blittingFrom: framebuffer,
+            width: Int(drawableWidth),
+            height: Int(drawableHeight)
+        ) {
+            onPictureInPictureFrame?(sampleBuffer)
+        }
     }
 
     /// Forces an immediate redraw regardless of the "new frame available"

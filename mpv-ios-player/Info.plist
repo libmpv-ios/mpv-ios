@@ -15,10 +15,18 @@
 
 	<!-- Enables audio to continue when the app is backgrounded/screen locked,
 	     and lets mpv's audio session stay active during playback. Equivalent
-	     to mpv-android's foreground service used for background playback. -->
+	     to mpv-android's foreground service used for background playback.
+	     "picture-in-picture" is required in addition to "audio" for
+	     AVPictureInPictureController to keep rendering PiP once the app is
+	     backgrounded — confirmed against multiple third-party PiP setup
+	     guides that add both keys together via Xcode's "Audio, AirPlay, and
+	     Picture in Picture" background-modes capability checkbox; "audio"
+	     alone (this project's previous setting, before PiP support was
+	     added) covers only background audio, not PiP itself. -->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
+		<string>picture-in-picture</string>
 	</array>
 
 	<!-- Only needed if you intend to play plain-HTTP (non-TLS) sources.
