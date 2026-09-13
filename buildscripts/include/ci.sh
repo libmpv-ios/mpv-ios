@@ -34,7 +34,16 @@ msg() {
 # file could alter its compiled output, even if no dependency version
 # changed — "did I just change what this script produces" is the
 # question to ask, not "did I just change a version number."
-BUILD_LOGIC_REV=6
+#
+# rev 7: libass.sh switched from autotools to meson. The autotools build
+# silently omitted libass/aarch64/*.S (its NEON asm sources — only
+# meson.build lists them), so old cached ios-arm64 prefixes contain a
+# libass.a with no NEON object code even though ass_bitmap_engine_init
+# still calls it, causing "Undefined symbols ... _ass_add_bitmaps_neon"
+# at the final link step. A version-only cache key would have kept
+# serving that broken prefix indefinitely since v_ci_libass didn't
+# change — see docs/RESEARCH.md entry 37.
+BUILD_LOGIC_REV=7
 
 cache_id() {
 	local platform=$1
