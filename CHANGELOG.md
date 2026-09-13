@@ -22,6 +22,8 @@ behind it, rather than repeating that investigation here.
 
 ## [Unreleased]
 
+## [v0.1.2] - 2026-09-13
+
 ### Fixed
 
 - `buildscripts/scripts/libass.sh`: the iOS **device** (arm64) build
