@@ -22,6 +22,17 @@ behind it, rather than repeating that investigation here.
 
 ## [Unreleased]
 
+### Fixed
+
+- `buildscripts/scripts/libass.sh`: the iOS **device** (arm64) build
+  failed at the final link step with ~24 undefined `_ass_*_neon` symbols
+  from `libmpv-combined.a`. libass's autotools build (`Makefile.am`)
+  never lists its own `libass/aarch64/*.S` NEON asm sources — only its
+  Meson build does — so the archive shipped a dispatcher that calls NEON
+  functions with no object code backing them. Rebuilt libass with Meson
+  + Ninja instead, matching every other Meson-based dependency in this
+  repo (`docs/RESEARCH.md` #37).
+
 ## [v0.1.1] - 2026-09-12
 
 ### Added
