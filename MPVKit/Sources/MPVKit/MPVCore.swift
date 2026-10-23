@@ -144,7 +144,7 @@ public final class MPVCore {
     /// Stops the event loop, then terminates and frees the mpv_handle.
     public func destroy() {
         guard let h = handle else { return }
-
+        command(["quit"])
         stopEventLoop()
         mpv_terminate_destroy(h)
         handle = nil
@@ -220,24 +220,24 @@ public final class MPVCore {
         }
         eventTask = nil
     }
-
     private func runEventLoop() async {
         guard let h = handle else { return }
 
         while !Task.isCancelled {
-            guard let event = mpv_wait_event(h, -1.0)?.pointee else { continue }
+            guard let event = mpv_wait_event(h, -1.0)?.pointee else { break }
 
-            if Task.isCancelled { break }
-            if event.event_id == MPV_EVENT_NONE { continue }
+            if Task.isCancelled || event.event_id == MPV_EVENT_SHUTDOWN {
+                break
+            }
+            if event.event_id == MPV_EVENT_NONE {
+                if Task.isCancelled { break }
+                continue
+            }
 
             let mapped = Self.mapEvent(event)
             await MainActor.run { [weak self] in
                 guard let self else { return }
                 self.delegate?.mpv(self, event: mapped)
-            }
-
-            if event.event_id == MPV_EVENT_SHUTDOWN {
-                break
             }
         }
     }

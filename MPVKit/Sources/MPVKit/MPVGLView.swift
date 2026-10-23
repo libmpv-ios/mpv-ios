@@ -362,7 +362,7 @@ public final class MPVGLView: UIView {
         // CAEAGLLayer's coordinate origin matches what mpv expects by
         // default when flip_y is 0 (unlike a desktop GL default
         // framebuffer, which is bottom-left and needs FLIP_Y=1).
-        var flipY: CInt = 0
+        var flipY: CInt = 1 //is flipped otherwise idk why tho above seems correct
         var skip: CInt = 0
 
         // `&fbo`/`&flipY`/`&skip` cannot be taken directly inside the

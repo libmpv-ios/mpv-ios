@@ -59,7 +59,9 @@ public final class PlayerViewModel: ObservableObject {
     /// first place).
     private var pausedByInterruption = false
 
-    public init() {}
+    public init() {
+        start()
+    }
 
     // MARK: - Lifecycle
 
@@ -69,6 +71,20 @@ public final class PlayerViewModel: ObservableObject {
     public func start(configuration: MPVConfiguration = .init()) {
         guard !isInitialized else { return }
         isInitialized = true
+
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let scriptsDir = docs.appendingPathComponent("scripts")
+        let mpvConf = docs.appendingPathComponent("mpv.conf")
+
+        try? FileManager.default.createDirectory(at: scriptsDir, withIntermediateDirectories: true)
+
+        if !FileManager.default.fileExists(atPath: mpvConf.path) {
+            let initialConfig = """
+            # mpv-ios configuration file
+            # Options set here are automatically loaded on startup.
+            """
+            try? initialConfig.write(to: mpvConf, atomically: true, encoding: .utf8)
+        }
 
         do {
             try configureAudioSession()
@@ -92,6 +108,7 @@ public final class PlayerViewModel: ObservableObject {
     /// ordering requirement (render context freed before core destroy).
     public func stop() {
         saveWatchLaterPosition()
+        core.stop()
         if let token = willResignActiveObserverToken {
             NotificationCenter.default.removeObserver(token)
             willResignActiveObserverToken = nil

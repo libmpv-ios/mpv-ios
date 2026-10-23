@@ -45,6 +45,8 @@ targets:
       path: mpv-ios-player/Info.plist
       properties:
         UILaunchScreen: {}
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
     settings:
       base:
         PRODUCT_NAME: MPVIOSPlayer

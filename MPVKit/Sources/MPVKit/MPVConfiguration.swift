@@ -10,7 +10,7 @@ public struct MPVConfiguration {
     /// video/out/hwdec/hwdec_ios_gl.m via CVOpenGLESTextureCache), which
     /// gives zero-copy decode-to-texture. "no" disables hw decode entirely;
     /// "auto" lets mpv choose.
-    public var hwdec: String = "videotoolbox"
+    public var hwdec: String = "videotoolbox-copy" //output is solid blue with zero-copy
 
     /// GPU-next is mpv's modern rendering pipeline (libplacebo-backed).
     /// Recommended on Apple platforms since it has first-class Metal support.
@@ -81,10 +81,13 @@ public struct MPVConfiguration {
         core.setOptionString("demuxer-max-bytes", "\(cacheSeconds * 1_000_000)")
         core.setOptionString("demuxer-readahead-secs", "\(cacheSeconds)")
 
-        if let dir = mpvConfigDirectory {
-            core.setOptionString("config-dir", dir.path)
-            core.setOptionString("config", "yes")
-        }
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let configDir = mpvConfigDirectory ?? documentsURL
+
+        core.setOptionString("config-dir", configDir.path)
+        core.setOptionString("config", "yes")
+        core.setOptionString("load-scripts", "yes")
+        
         if let dir = screenshotDirectory {
             core.setOptionString("screenshot-directory", dir.path)
         }
